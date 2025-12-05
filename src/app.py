@@ -12,7 +12,7 @@ import json
 import os
 import shutil
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -473,6 +473,385 @@ def get_project_details(uuid: str) -> tuple[Response, int] | Response:
 def analytics() -> str:
     """Analytics dashboard page."""
     return render_template("analytics.html")
+
+
+@app.route("/stats")
+def stats_page() -> str:
+    """Stats and trends page with charts."""
+    return render_template("stats.html")
+
+
+@app.route("/api/stats/timeseries")
+def get_stats_timeseries() -> Response:
+    """Get time-series statistics for charts."""
+    days = int(request.args.get("days", 30))
+    group_by = request.args.get("group_by", "day")
+
+    # Build date filter
+    date_filter: dict[str, Any] = {}
+    if days > 0:
+        from_date = datetime.now() - timedelta(days=days)
+        date_filter["created_at"] = {"$gte": from_date.isoformat()}
+
+    # Get all conversations for the period
+    conversations = list(
+        db.conversations.find(
+            date_filter,
+            {
+                "created_at": 1,
+                "chat_messages": 1,
+                "_account_name": 1,
+            },
+        )
+    )
+
+    # Calculate summary statistics
+    total_conversations = len(conversations)
+    total_messages = 0
+    human_messages = 0
+    assistant_messages = 0
+
+    for conv in conversations:
+        msgs = conv.get("chat_messages", [])
+        total_messages += len(msgs)
+        for msg in msgs:
+            sender = msg.get("sender", "")
+            if sender == "human":
+                human_messages += 1
+            elif sender == "assistant":
+                assistant_messages += 1
+
+    # Calculate date range
+    all_dates = []
+    for conv in conversations:
+        created = conv.get("created_at")
+        if created:
+            if isinstance(created, str):
+                try:
+                    all_dates.append(datetime.fromisoformat(created.replace("Z", "+00:00")))
+                except ValueError:
+                    pass
+            elif isinstance(created, datetime):
+                all_dates.append(created)
+
+    data_span_days = 0
+    if all_dates:
+        data_span_days = (max(all_dates) - min(all_dates)).days + 1
+
+    avg_per_day = total_conversations / max(data_span_days, 1)
+
+    # Group conversations by time period
+    time_series: dict[str, list[dict[str, Any]]] = {"day": [], "week": [], "month": []}
+
+    # Group by day
+    day_groups: dict[str, dict[str, int]] = {}
+    for conv in conversations:
+        created = conv.get("created_at")
+        if created:
+            if isinstance(created, str):
+                try:
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            elif isinstance(created, datetime):
+                dt = created
+            else:
+                continue
+
+            day_key = dt.strftime("%Y-%m-%d")
+            if day_key not in day_groups:
+                day_groups[day_key] = {
+                    "conversations": 0,
+                    "human_messages": 0,
+                    "assistant_messages": 0,
+                }
+            day_groups[day_key]["conversations"] += 1
+
+            for msg in conv.get("chat_messages", []):
+                sender = msg.get("sender", "")
+                if sender == "human":
+                    day_groups[day_key]["human_messages"] += 1
+                elif sender == "assistant":
+                    day_groups[day_key]["assistant_messages"] += 1
+
+    # Sort and format day data
+    sorted_days = sorted(day_groups.keys())
+    for day in sorted_days:
+        data = day_groups[day]
+        dt = datetime.strptime(day, "%Y-%m-%d")
+        time_series["day"].append({
+            "date": day,
+            "label": dt.strftime("%b %d"),
+            "conversations": data["conversations"],
+            "human_messages": data["human_messages"],
+            "assistant_messages": data["assistant_messages"],
+        })
+
+    # Group by week
+    week_groups: dict[str, dict[str, int]] = {}
+    for conv in conversations:
+        created = conv.get("created_at")
+        if created:
+            if isinstance(created, str):
+                try:
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            elif isinstance(created, datetime):
+                dt = created
+            else:
+                continue
+
+            week_key = dt.strftime("%Y-W%W")
+            if week_key not in week_groups:
+                week_groups[week_key] = {
+                    "conversations": 0,
+                    "human_messages": 0,
+                    "assistant_messages": 0,
+                }
+            week_groups[week_key]["conversations"] += 1
+
+            for msg in conv.get("chat_messages", []):
+                sender = msg.get("sender", "")
+                if sender == "human":
+                    week_groups[week_key]["human_messages"] += 1
+                elif sender == "assistant":
+                    week_groups[week_key]["assistant_messages"] += 1
+
+    sorted_weeks = sorted(week_groups.keys())
+    for week in sorted_weeks:
+        data = week_groups[week]
+        time_series["week"].append({
+            "date": week,
+            "label": week.replace("-W", " W"),
+            "conversations": data["conversations"],
+            "human_messages": data["human_messages"],
+            "assistant_messages": data["assistant_messages"],
+        })
+
+    # Group by month
+    month_groups: dict[str, dict[str, int]] = {}
+    for conv in conversations:
+        created = conv.get("created_at")
+        if created:
+            if isinstance(created, str):
+                try:
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            elif isinstance(created, datetime):
+                dt = created
+            else:
+                continue
+
+            month_key = dt.strftime("%Y-%m")
+            if month_key not in month_groups:
+                month_groups[month_key] = {
+                    "conversations": 0,
+                    "human_messages": 0,
+                    "assistant_messages": 0,
+                }
+            month_groups[month_key]["conversations"] += 1
+
+            for msg in conv.get("chat_messages", []):
+                sender = msg.get("sender", "")
+                if sender == "human":
+                    month_groups[month_key]["human_messages"] += 1
+                elif sender == "assistant":
+                    month_groups[month_key]["assistant_messages"] += 1
+
+    sorted_months = sorted(month_groups.keys())
+    for month in sorted_months:
+        data = month_groups[month]
+        dt = datetime.strptime(month + "-01", "%Y-%m-%d")
+        time_series["month"].append({
+            "date": month,
+            "label": dt.strftime("%b %Y"),
+            "conversations": data["conversations"],
+            "human_messages": data["human_messages"],
+            "assistant_messages": data["assistant_messages"],
+        })
+
+    # Account distribution
+    account_counts: dict[str, int] = {}
+    for conv in conversations:
+        account = conv.get("_account_name", "Unknown")
+        account_counts[account] = account_counts.get(account, 0) + 1
+
+    account_distribution = [
+        {"account": acc, "count": count}
+        for acc, count in sorted(account_counts.items(), key=lambda x: -x[1])
+    ]
+
+    # Day of week distribution
+    day_of_week_counts: dict[int, int] = {}
+    for conv in conversations:
+        created = conv.get("created_at")
+        if created:
+            if isinstance(created, str):
+                try:
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            elif isinstance(created, datetime):
+                dt = created
+            else:
+                continue
+
+            dow = dt.weekday()  # Monday = 0, Sunday = 6
+            # Convert to Sunday = 0 format
+            dow = (dow + 1) % 7
+            day_of_week_counts[dow] = day_of_week_counts.get(dow, 0) + 1
+
+    day_of_week_distribution = [
+        {"day": day, "count": count}
+        for day, count in sorted(day_of_week_counts.items())
+    ]
+
+    # Hour of day distribution
+    hour_counts: dict[int, int] = {}
+    for conv in conversations:
+        created = conv.get("created_at")
+        if created:
+            if isinstance(created, str):
+                try:
+                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+            elif isinstance(created, datetime):
+                dt = created
+            else:
+                continue
+
+            hour = dt.hour
+            hour_counts[hour] = hour_counts.get(hour, 0) + 1
+
+    hour_of_day_distribution = [
+        {"hour": hour, "count": count}
+        for hour, count in sorted(hour_counts.items())
+    ]
+
+    # Conversation length distribution (by message count)
+    length_buckets = [
+        (1, 5),
+        (6, 10),
+        (11, 20),
+        (21, 50),
+        (51, 100),
+        (101, float("inf")),
+    ]
+    length_counts = [0] * len(length_buckets)
+
+    for conv in conversations:
+        msg_count = len(conv.get("chat_messages", []))
+        for i, (low, high) in enumerate(length_buckets):
+            if low <= msg_count <= high:
+                length_counts[i] += 1
+                break
+
+    length_distribution = [
+        {"bucket": f"{low}-{high if high != float('inf') else '+'}", "count": count}
+        for (low, high), count in zip(length_buckets, length_counts)
+    ]
+
+    # Calculate trend (compare to previous period)
+    conversation_trend = 0
+    if days > 0 and total_conversations > 0:
+        prev_from = datetime.now() - timedelta(days=days * 2)
+        prev_to = datetime.now() - timedelta(days=days)
+        prev_count = db.conversations.count_documents({
+            "created_at": {
+                "$gte": prev_from.isoformat(),
+                "$lt": prev_to.isoformat(),
+            }
+        })
+        if prev_count > 0:
+            conversation_trend = round(
+                ((total_conversations - prev_count) / prev_count) * 100
+            )
+
+    return jsonify({
+        "summary": {
+            "total_conversations": total_conversations,
+            "total_messages": total_messages,
+            "avg_per_day": round(avg_per_day, 2),
+            "data_span_days": data_span_days,
+            "conversation_trend": conversation_trend,
+        },
+        "time_series": time_series,
+        "message_distribution": {
+            "human": human_messages,
+            "assistant": assistant_messages,
+        },
+        "account_distribution": account_distribution,
+        "day_of_week_distribution": day_of_week_distribution,
+        "hour_of_day_distribution": hour_of_day_distribution,
+        "length_distribution": length_distribution,
+    })
+
+
+@app.route("/api/stats/heatmap")
+def api_stats_heatmap() -> Response:
+    """Get heatmap data for GitHub-style calendar view."""
+    year = request.args.get("year", datetime.now().year, type=int)
+
+    # Get all conversations for the specified year
+    start_date = datetime(year, 1, 1)
+    end_date = datetime(year, 12, 31, 23, 59, 59)
+
+    pipeline = [
+        {
+            "$match": {
+                "created_at": {
+                    "$gte": start_date.isoformat(),
+                    "$lte": end_date.isoformat(),
+                }
+            }
+        },
+        {
+            "$group": {
+                "_id": {"$substr": ["$created_at", 0, 10]},  # Group by date (YYYY-MM-DD)
+                "count": {"$sum": 1},
+            }
+        },
+        {"$sort": {"_id": 1}},
+    ]
+
+    results = list(db.conversations.aggregate(pipeline))
+
+    # Convert to dictionary for easier lookup
+    daily_counts: dict[str, int] = {r["_id"]: r["count"] for r in results}
+
+    # Calculate stats
+    total_conversations = sum(daily_counts.values())
+    active_days = len(daily_counts)
+    max_in_day = max(daily_counts.values()) if daily_counts else 0
+    avg_per_day = round(total_conversations / active_days, 1) if active_days > 0 else 0
+
+    # Get available years for navigation
+    available_years_pipeline = [
+        {
+            "$group": {
+                "_id": {"$substr": ["$created_at", 0, 4]},
+            }
+        },
+        {"$sort": {"_id": -1}},
+    ]
+    available_years = [
+        int(r["_id"]) for r in db.conversations.aggregate(available_years_pipeline) if r["_id"]
+    ]
+
+    return jsonify({
+        "year": year,
+        "daily_counts": daily_counts,
+        "stats": {
+            "total_conversations": total_conversations,
+            "active_days": active_days,
+            "avg_per_day": avg_per_day,
+            "max_in_day": max_in_day,
+        },
+        "available_years": available_years,
+    })
 
 
 @app.route("/export")

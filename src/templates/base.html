@@ -962,11 +962,17 @@
         }
         
         .account-badge {
-            font-size: 0.6875rem;
-            font-weight: 500;
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-medium);
             padding: 0.25rem 0.625rem;
             background: var(--color-slate-100) !important;
             color: var(--color-slate-600) !important;
+            border-radius: var(--radius-full);
+            /* Handle email overflow */
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         /* Conversation Stats */
@@ -984,16 +990,17 @@
             flex-wrap: wrap;
         }
         
+        /* Unified stat badge styling - pill shape in both modes */
         .metric-item {
             display: inline-flex;
             align-items: center;
-            gap: 0.375rem;
+            gap: 0.25rem;
             font-size: var(--font-size-xs);
-            color: var(--text-tertiary);
-            padding: 0.25rem 0.625rem;
-            background: var(--surface-1);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-muted);
+            font-weight: var(--font-weight-medium);
+            color: var(--color-slate-600);
+            padding: 0.1875rem 0.5rem;
+            background: var(--color-slate-100);
+            border-radius: var(--radius-full);
             transition: var(--transition-fast);
             font-variant-numeric: tabular-nums;
         }
@@ -1001,28 +1008,47 @@
         .metric-item:hover {
             background: var(--color-primary-50);
             color: var(--color-primary);
-            border-color: var(--color-primary-100);
         }
         
         .metric-item i {
-            font-size: 0.75rem;
-            opacity: 0.8;
+            font-size: 0.6875rem;
+            opacity: 0.75;
         }
         
-        /* Dark mode metrics */
+        /* Artifact badge - distinct orange styling */
+        .metric-item.metric-artifacts {
+            background: var(--color-warning-50);
+            color: var(--color-warning-text);
+        }
+        
+        .metric-item.metric-artifacts:hover {
+            background: var(--color-warning);
+            color: #fff;
+        }
+        
+        /* Dark mode metrics - same pill style */
         [data-theme="dark"] .metric-item {
-            background: var(--surface-2);
-            border-color: var(--border-default);
+            background: var(--color-slate-700);
+            color: var(--color-slate-300);
         }
         [data-theme="dark"] .metric-item:hover {
             background: var(--color-primary-50);
+            color: var(--color-primary);
+        }
+        
+        [data-theme="dark"] .metric-item.metric-artifacts {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--color-warning);
+        }
+        [data-theme="dark"] .metric-item.metric-artifacts:hover {
+            background: var(--color-warning);
+            color: #000;
         }
         
         /* ============================================
            FILTER CHIPS / QUICK SORT BUTTONS
            ============================================ */
-        .filter-chip,
-        .btn-group-sm .btn.btn-outline-secondary {
+        .filter-chip {
             padding: 0.375rem 0.875rem;
             border-radius: var(--radius-full);
             font-size: var(--font-size-sm);
@@ -1033,14 +1059,36 @@
             transition: var(--transition-fast);
         }
         
-        .filter-chip:hover,
+        .filter-chip:hover {
+            background: var(--surface-2);
+            color: var(--text-secondary);
+            border-color: var(--border-strong);
+        }
+        
+        .filter-chip.active {
+            background: var(--color-primary-50);
+            color: var(--color-primary);
+            border-color: var(--color-primary-200);
+            font-weight: var(--font-weight-semibold);
+        }
+        
+        /* Button group toggle styling - preserve Bootstrap border-radius handling */
+        .btn-group-sm .btn.btn-outline-secondary {
+            padding: 0.375rem 0.875rem;
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-medium);
+            color: var(--text-tertiary);
+            background: transparent;
+            border: 1px solid var(--border-default);
+            transition: var(--transition-fast);
+        }
+        
         .btn-group-sm .btn.btn-outline-secondary:hover {
             background: var(--surface-2);
             color: var(--text-secondary);
             border-color: var(--border-strong);
         }
         
-        .filter-chip.active,
         .btn-group-sm .btn.btn-outline-secondary.active {
             background: var(--color-primary-50);
             color: var(--color-primary);
@@ -1049,46 +1097,65 @@
         }
         
         /* Dark mode filter chips */
-        [data-theme="dark"] .filter-chip,
+        [data-theme="dark"] .filter-chip {
+            border-color: var(--border-default);
+            color: var(--text-tertiary);
+        }
+        [data-theme="dark"] .filter-chip:hover {
+            background: var(--surface-2);
+            color: var(--text-secondary);
+        }
+        [data-theme="dark"] .filter-chip.active {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--color-primary);
+        }
+        
+        /* Dark mode button group */
         [data-theme="dark"] .btn-group-sm .btn.btn-outline-secondary {
             border-color: var(--border-default);
             color: var(--text-tertiary);
         }
-        [data-theme="dark"] .filter-chip:hover,
         [data-theme="dark"] .btn-group-sm .btn.btn-outline-secondary:hover {
             background: var(--surface-2);
             color: var(--text-secondary);
         }
-        [data-theme="dark"] .filter-chip.active,
         [data-theme="dark"] .btn-group-sm .btn.btn-outline-secondary.active {
             background: rgba(99, 102, 241, 0.2);
             color: var(--color-primary);
         }
         
         /* ============================================
-           ENGAGEMENT LEGEND
+           ENGAGEMENT LEGEND - Enhanced visibility
            ============================================ */
         .engagement-legend {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 1rem;
             font-size: var(--font-size-xs);
-            color: var(--text-muted);
-            padding: 0.5rem 0;
+            color: var(--text-tertiary);
+            padding: 0.5rem 0.875rem;
+            background: var(--surface-1);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-muted);
+        }
+        
+        .engagement-legend > small {
+            font-weight: var(--font-weight-medium);
+            color: var(--text-secondary);
         }
         
         .legend-item {
             display: inline-flex;
             align-items: center;
             gap: 0.375rem;
-            margin-right: 0.75rem;
         }
         
         .legend-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: var(--radius-sm);
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
             display: inline-block;
+            flex-shrink: 0;
         }
         
         .legend-dot.legend-high {
@@ -1101,6 +1168,12 @@
         
         .legend-dot.legend-low {
             background: var(--color-slate-300);
+        }
+        
+        /* Dark mode legend */
+        [data-theme="dark"] .engagement-legend {
+            background: var(--surface-2);
+            border-color: var(--border-default);
         }
         
         [data-theme="dark"] .legend-dot.legend-low {
@@ -2486,6 +2559,7 @@
                     <a class="nav-link text-white" href="/conversations"><i class="bi bi-chat-dots"></i> Conversations</a>
                     <a class="nav-link text-white" href="/projects"><i class="bi bi-folder"></i> Projects</a>
                     <a class="nav-link text-white" href="/analytics"><i class="bi bi-graph-up"></i> Analytics</a>
+                    <a class="nav-link text-white" href="/stats"><i class="bi bi-bar-chart-line"></i> Stats</a>
                     <a class="nav-link text-white" href="/export"><i class="bi bi-download"></i> Export</a>
                 </nav>
                 

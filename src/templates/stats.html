@@ -1,0 +1,794 @@
+<!-- templates/stats.html -->
+{% extends "base.html" %}
+{% block title %}Stats - Anthropic Data Manager{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1">Stats &amp; Trends</h2>
+        <p class="text-muted mb-0">Usage patterns and volume analysis across your data</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="timeRange" class="form-select form-select-sm" style="width: auto;" onchange="loadAllCharts()">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last year</option>
+            <option value="0">All time</option>
+        </select>
+        <button class="btn btn-outline-primary btn-sm" onclick="loadAllCharts()">
+            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4 g-3" id="summaryCards">
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-summary-card">
+            <div class="stats-icon" style="background: var(--color-primary-50); color: var(--color-primary);">
+                <i class="bi bi-chat-dots"></i>
+            </div>
+            <div class="stats-info">
+                <span class="stats-value" id="totalConversations">-</span>
+                <span class="stats-label">Total Conversations</span>
+                <span class="stats-trend" id="conversationsTrend"></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-summary-card">
+            <div class="stats-icon" style="background: var(--color-success-50); color: var(--color-success);">
+                <i class="bi bi-chat-square-text"></i>
+            </div>
+            <div class="stats-info">
+                <span class="stats-value" id="totalMessages">-</span>
+                <span class="stats-label">Total Messages</span>
+                <span class="stats-trend" id="messagesTrend"></span>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-summary-card">
+            <div class="stats-icon" style="background: var(--color-warning-50); color: var(--color-warning);">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <div class="stats-info">
+                <span class="stats-value" id="avgPerDay">-</span>
+                <span class="stats-label">Avg Conversations/Day</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-summary-card">
+            <div class="stats-icon" style="background: var(--color-info-50); color: var(--color-info);">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <div class="stats-info">
+                <span class="stats-value" id="dataSpan">-</span>
+                <span class="stats-label">Data Span</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Charts Row -->
+<div class="row mb-4 g-4">
+    <!-- Conversations Over Time -->
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Conversations Over Time</h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary active" onclick="setChartGroup('day', this)">Day</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="setChartGroup('week', this)">Week</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="setChartGroup('month', this)">Month</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="conversationsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Message Distribution -->
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Message Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="messageDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Secondary Charts Row -->
+<div class="row mb-4 g-4">
+    <!-- Messages Volume -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Messages Volume</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 280px;">
+                    <canvas id="messagesVolumeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Account Distribution -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-people me-2"></i>Conversations by Account</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 280px;">
+                    <canvas id="accountDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Heatmap & Top Days -->
+<div class="row mb-4 g-4">
+    <!-- Activity by Day of Week -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>Activity by Day of Week</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 250px;">
+                    <canvas id="dayOfWeekChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Activity by Hour -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Activity by Hour of Day</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 250px;">
+                    <canvas id="hourOfDayChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Conversation Length Distribution -->
+<div class="row mb-4 g-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart-steps me-2"></i>Conversation Length Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 200px;">
+                    <canvas id="lengthDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+
+<script>
+// Chart instances
+let conversationsChart, messageDistributionChart, messagesVolumeChart;
+let accountDistributionChart, dayOfWeekChart, hourOfDayChart, lengthDistributionChart;
+let currentGroupBy = 'day';
+
+// Chart.js default configuration
+Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.padding = 16;
+
+// Get computed CSS variables for theming
+function getChartColors() {
+    const style = getComputedStyle(document.documentElement);
+    return {
+        primary: style.getPropertyValue('--color-primary').trim() || '#4f46e5',
+        primaryLight: style.getPropertyValue('--color-primary-light').trim() || '#6366f1',
+        success: style.getPropertyValue('--color-success').trim() || '#059669',
+        warning: style.getPropertyValue('--color-warning').trim() || '#d97706',
+        info: style.getPropertyValue('--color-info').trim() || '#0284c7',
+        error: style.getPropertyValue('--color-error').trim() || '#dc2626',
+        slate400: style.getPropertyValue('--color-slate-400').trim() || '#94a3b8',
+        slate200: style.getPropertyValue('--color-slate-200').trim() || '#e2e8f0',
+        textPrimary: style.getPropertyValue('--text-primary').trim() || '#1e293b',
+        textSecondary: style.getPropertyValue('--text-secondary').trim() || '#475569',
+    };
+}
+
+// Show/hide loading state
+function setLoading(loading) {
+    document.getElementById('loadingOverlay').style.display = loading ? 'flex' : 'none';
+}
+
+// Format numbers with K/M suffix
+function formatNumber(num) {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
+}
+
+// Set chart grouping
+function setChartGroup(group, btn) {
+    currentGroupBy = group;
+    document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadTimeSeriesChart();
+}
+
+// Load all charts
+async function loadAllCharts() {
+    setLoading(true);
+    try {
+        const days = document.getElementById('timeRange').value;
+        const response = await fetch(`/api/stats/timeseries?days=${days}`);
+        const data = await response.json();
+        
+        updateSummaryCards(data);
+        createConversationsChart(data);
+        createMessageDistributionChart(data);
+        createMessagesVolumeChart(data);
+        createAccountDistributionChart(data);
+        createDayOfWeekChart(data);
+        createHourOfDayChart(data);
+        createLengthDistributionChart(data);
+    } catch (error) {
+        console.error('Failed to load stats:', error);
+    } finally {
+        setLoading(false);
+    }
+}
+
+// Load just the time series chart
+async function loadTimeSeriesChart() {
+    const days = document.getElementById('timeRange').value;
+    const response = await fetch(`/api/stats/timeseries?days=${days}&group_by=${currentGroupBy}`);
+    const data = await response.json();
+    createConversationsChart(data);
+    createMessagesVolumeChart(data);
+}
+
+// Update summary cards
+function updateSummaryCards(data) {
+    document.getElementById('totalConversations').textContent = formatNumber(data.summary.total_conversations);
+    document.getElementById('totalMessages').textContent = formatNumber(data.summary.total_messages);
+    document.getElementById('avgPerDay').textContent = data.summary.avg_per_day.toFixed(1);
+    document.getElementById('dataSpan').textContent = data.summary.data_span_days + ' days';
+    
+    // Trend indicators
+    const convTrend = document.getElementById('conversationsTrend');
+    const msgTrend = document.getElementById('messagesTrend');
+    
+    if (data.summary.conversation_trend > 0) {
+        convTrend.innerHTML = `<i class="bi bi-arrow-up"></i> ${data.summary.conversation_trend}%`;
+        convTrend.className = 'stats-trend trend-up';
+    } else if (data.summary.conversation_trend < 0) {
+        convTrend.innerHTML = `<i class="bi bi-arrow-down"></i> ${Math.abs(data.summary.conversation_trend)}%`;
+        convTrend.className = 'stats-trend trend-down';
+    } else {
+        convTrend.innerHTML = '';
+    }
+}
+
+// Conversations over time chart
+function createConversationsChart(data) {
+    const ctx = document.getElementById('conversationsChart').getContext('2d');
+    const colors = getChartColors();
+    
+    if (conversationsChart) conversationsChart.destroy();
+    
+    const timeSeries = data.time_series[currentGroupBy] || data.time_series.day;
+    
+    conversationsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: timeSeries.map(d => d.label),
+            datasets: [{
+                label: 'Conversations',
+                data: timeSeries.map(d => d.conversations),
+                borderColor: colors.primary,
+                backgroundColor: colors.primary + '20',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index',
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    titleFont: { size: 13 },
+                    bodyFont: { size: 12 },
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: colors.slate400 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: colors.slate200 },
+                    ticks: { color: colors.slate400, precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+// Message distribution (human vs assistant)
+function createMessageDistributionChart(data) {
+    const ctx = document.getElementById('messageDistributionChart').getContext('2d');
+    const colors = getChartColors();
+    
+    if (messageDistributionChart) messageDistributionChart.destroy();
+    
+    const dist = data.message_distribution;
+    
+    messageDistributionChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['You (Human)', 'Claude (Assistant)'],
+            datasets: [{
+                data: [dist.human || 0, dist.assistant || 0],
+                backgroundColor: [colors.primary, colors.success],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 20 }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    callbacks: {
+                        label: (ctx) => {
+                            const total = dist.human + dist.assistant;
+                            const pct = ((ctx.raw / total) * 100).toFixed(1);
+                            return `${ctx.label}: ${formatNumber(ctx.raw)} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Messages volume bar chart
+function createMessagesVolumeChart(data) {
+    const ctx = document.getElementById('messagesVolumeChart').getContext('2d');
+    const colors = getChartColors();
+    
+    if (messagesVolumeChart) messagesVolumeChart.destroy();
+    
+    const timeSeries = data.time_series[currentGroupBy] || data.time_series.day;
+    
+    messagesVolumeChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: timeSeries.map(d => d.label),
+            datasets: [
+                {
+                    label: 'Human Messages',
+                    data: timeSeries.map(d => d.human_messages || 0),
+                    backgroundColor: colors.primary,
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Assistant Messages',
+                    data: timeSeries.map(d => d.assistant_messages || 0),
+                    backgroundColor: colors.success,
+                    borderRadius: 4,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    align: 'end',
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: colors.slate400 }
+                },
+                y: {
+                    beginAtZero: true,
+                    stacked: false,
+                    grid: { color: colors.slate200 },
+                    ticks: { color: colors.slate400, precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+// Account distribution
+function createAccountDistributionChart(data) {
+    const ctx = document.getElementById('accountDistributionChart').getContext('2d');
+    const colors = getChartColors();
+    
+    if (accountDistributionChart) accountDistributionChart.destroy();
+    
+    const accounts = data.account_distribution || [];
+    const chartColors = [colors.primary, colors.success, colors.warning, colors.info, colors.error];
+    
+    accountDistributionChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: accounts.map(a => a.account || 'Unknown'),
+            datasets: [{
+                data: accounts.map(a => a.count),
+                backgroundColor: accounts.map((_, i) => chartColors[i % chartColors.length]),
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '55%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { padding: 12 }
+                }
+            }
+        }
+    });
+}
+
+// Day of week activity
+function createDayOfWeekChart(data) {
+    const ctx = document.getElementById('dayOfWeekChart').getContext('2d');
+    const colors = getChartColors();
+    
+    if (dayOfWeekChart) dayOfWeekChart.destroy();
+    
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayData = data.day_of_week_distribution || [];
+    
+    // Map data to days
+    const values = days.map((_, i) => {
+        const found = dayData.find(d => d.day === i);
+        return found ? found.count : 0;
+    });
+    
+    dayOfWeekChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: days.map(d => d.substring(0, 3)),
+            datasets: [{
+                label: 'Conversations',
+                data: values,
+                backgroundColor: values.map((v, i) => {
+                    const max = Math.max(...values);
+                    const intensity = max > 0 ? v / max : 0;
+                    return `rgba(79, 70, 229, ${0.3 + intensity * 0.7})`;
+                }),
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: colors.slate400 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: colors.slate200 },
+                    ticks: { color: colors.slate400, precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+// Hour of day activity
+function createHourOfDayChart(data) {
+    const ctx = document.getElementById('hourOfDayChart').getContext('2d');
+    const colors = getChartColors();
+    
+    if (hourOfDayChart) hourOfDayChart.destroy();
+    
+    const hourData = data.hour_of_day_distribution || [];
+    
+    // Create 24-hour array
+    const values = Array(24).fill(0);
+    hourData.forEach(h => {
+        if (h.hour >= 0 && h.hour < 24) {
+            values[h.hour] = h.count;
+        }
+    });
+    
+    const labels = Array.from({length: 24}, (_, i) => {
+        const hour = i % 12 || 12;
+        const ampm = i < 12 ? 'a' : 'p';
+        return `${hour}${ampm}`;
+    });
+    
+    hourOfDayChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Conversations',
+                data: values,
+                backgroundColor: values.map((v) => {
+                    const max = Math.max(...values);
+                    const intensity = max > 0 ? v / max : 0;
+                    return `rgba(5, 150, 105, ${0.3 + intensity * 0.7})`;
+                }),
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { 
+                        color: colors.slate400,
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 12
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: colors.slate200 },
+                    ticks: { color: colors.slate400, precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+// Conversation length distribution
+function createLengthDistributionChart(data) {
+    const ctx = document.getElementById('lengthDistributionChart').getContext('2d');
+    const colors = getChartColors();
+    
+    if (lengthDistributionChart) lengthDistributionChart.destroy();
+    
+    const lengthData = data.length_distribution || [];
+    const buckets = ['1-5', '6-10', '11-20', '21-50', '51-100', '100+'];
+    
+    lengthDistributionChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: buckets.map(b => b + ' msgs'),
+            datasets: [{
+                label: 'Conversations',
+                data: lengthData.map(l => l.count),
+                backgroundColor: colors.info,
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: colors.slate400 }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: colors.slate200 },
+                    ticks: { color: colors.slate400, precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', loadAllCharts);
+</script>
+
+<style>
+/* Stats page specific styles */
+.stats-summary-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    transition: var(--transition-fast);
+}
+
+.stats-summary-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.stats-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: var(--radius-lg);
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.stats-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.stats-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.stats-label {
+    font-size: 0.8125rem;
+    color: var(--text-tertiary);
+    font-weight: 500;
+}
+
+.stats-trend {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.stats-trend.trend-up {
+    color: var(--color-success);
+}
+
+.stats-trend.trend-down {
+    color: var(--color-error);
+}
+
+/* Chart container */
+.chart-container {
+    position: relative;
+    width: 100%;
+}
+
+/* Loading overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-modal);
+}
+
+[data-theme="dark"] .loading-overlay {
+    background: rgba(15, 23, 42, 0.7);
+}
+
+/* Card header improvements */
+.card-header h5 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+}
+
+.card-header h5 i {
+    color: var(--color-primary);
+}
+
+/* Dark mode chart styling */
+[data-theme="dark"] .stats-summary-card {
+    background: var(--surface-1);
+    border-color: var(--border-default);
+}
+
+[data-theme="dark"] .stats-value {
+    color: var(--text-primary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .stats-summary-card {
+        padding: 1rem;
+    }
+    
+    .stats-value {
+        font-size: 1.5rem;
+    }
+    
+    .stats-icon {
+        width: 3rem;
+        height: 3rem;
+        font-size: 1.25rem;
+    }
+    
+    .chart-container {
+        height: 250px !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .d-flex.gap-2 {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    #timeRange {
+        width: 100% !important;
+    }
+}
+</style>
+{% endblock %}
