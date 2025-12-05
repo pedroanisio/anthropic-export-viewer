@@ -1,0 +1,139 @@
+<!-- templates/analytics.html -->
+{% extends "base.html" %}
+{% block title %}Analytics - Anthropic Data Manager{% endblock %}
+{% block content %}
+<h2 class="mb-4">Analytics</h2>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Usage Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div id="statsContainer" class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading analytics data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Messages by Sender</h5>
+            </div>
+            <div class="card-body" id="messagesBySender">
+                <!-- Chart will be loaded here -->
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Data Overview</h5>
+            </div>
+            <div class="card-body" id="dataOverview">
+                <!-- Overview will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadAnalytics() {
+    try {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+        
+        // Display basic stats
+        const statsHtml = `
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <h3>${data.total_conversations}</h3>
+                        <p>Conversations</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <h3>${data.total_users}</h3>
+                        <p>Users</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <h3>${data.total_projects}</h3>
+                        <p>Projects</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-item">
+                        <h3>${data.accounts.length}</h3>
+                        <p>Accounts</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById('statsContainer').innerHTML = statsHtml;
+        
+        // Display message breakdown
+        if (data.messages_by_sender && data.messages_by_sender.length > 0) {
+            let messagesHtml = '<ul class="list-group">';
+            data.messages_by_sender.forEach(sender => {
+                messagesHtml += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                    ${sender._id || 'Unknown'} 
+                    <span class="badge bg-primary rounded-pill">${sender.count}</span>
+                </li>`;
+            });
+            messagesHtml += '</ul>';
+            document.getElementById('messagesBySender').innerHTML = messagesHtml;
+        } else {
+            document.getElementById('messagesBySender').innerHTML = '<p class="text-muted">No message data available</p>';
+        }
+        
+        // Display data overview
+        const overviewHtml = `
+            <div class="list-group list-group-flush">
+                <div class="list-group-item">
+                    <strong>Accounts:</strong> ${data.accounts.join(', ')}
+                </div>
+                ${data.date_range && data.date_range.earliest ? `
+                <div class="list-group-item">
+                    <strong>Date Range:</strong> ${new Date(data.date_range.earliest).toLocaleDateString()} - ${new Date(data.date_range.latest).toLocaleDateString()}
+                </div>` : ''}
+            </div>
+        `;
+        document.getElementById('dataOverview').innerHTML = overviewHtml;
+        
+    } catch (error) {
+        document.getElementById('statsContainer').innerHTML = '<div class="alert alert-danger">Failed to load analytics data</div>';
+    }
+}
+
+// Load analytics on page load
+loadAnalytics();
+</script>
+
+<style>
+.stat-item {
+    text-align: center;
+    padding: 20px;
+}
+.stat-item h3 {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #667eea;
+}
+.stat-item p {
+    color: #6c757d;
+    margin: 0;
+}
+</style>
+{% endblock %}
+

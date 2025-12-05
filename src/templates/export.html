@@ -1,0 +1,159 @@
+<!-- templates/export.html -->
+{% extends "base.html" %}
+{% block title %}Export - Anthropic Data Manager{% endblock %}
+{% block content %}
+<h2 class="mb-4">Export Data</h2>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> Export your Anthropic data in various formats for backup or analysis.
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Export Conversations</h5>
+            </div>
+            <div class="card-body">
+                <p>Export conversation data in JSON or CSV format.</p>
+                <div class="mb-3">
+                    <label class="form-label">Account Filter</label>
+                    <select class="form-select" id="exportAccountFilter">
+                        <option value="">All Accounts</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Date Range</label>
+                    <div class="row">
+                        <div class="col">
+                            <input type="date" class="form-control" id="exportDateFrom">
+                        </div>
+                        <div class="col">
+                            <input type="date" class="form-control" id="exportDateTo">
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Format</label>
+                    <select class="form-select" id="exportFormat">
+                        <option value="json">JSON</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="exportData('conversations')">
+                    <i class="bi bi-download"></i> Export Conversations
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-folder"></i> Export Projects</h5>
+            </div>
+            <div class="card-body">
+                <p>Export project data and metadata.</p>
+                <button class="btn btn-primary" onclick="exportData('projects')">
+                    <i class="bi bi-download"></i> Export Projects
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-database"></i> Full Database Export</h5>
+            </div>
+            <div class="card-body">
+                <p>Export all data including conversations, projects, users, and metadata.</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> This may be a large download depending on your data size.
+                </div>
+                <button class="btn btn-warning" onclick="exportData('full')">
+                    <i class="bi bi-download"></i> Export All Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load accounts for filter
+async function loadAccounts() {
+    try {
+        const response = await fetch('/api/accounts');
+        const accounts = await response.json();
+        
+        const select = document.getElementById('exportAccountFilter');
+        accounts.forEach(account => {
+            const option = document.createElement('option');
+            option.value = account;
+            option.textContent = account;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load accounts:', error);
+    }
+}
+
+// Export data function
+async function exportData(type) {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Exporting...';
+    button.disabled = true;
+    
+    try {
+        let url = '/api/export/';
+        let params = new URLSearchParams();
+        
+        if (type === 'conversations') {
+            url += 'conversations';
+            const account = document.getElementById('exportAccountFilter').value;
+            const dateFrom = document.getElementById('exportDateFrom').value;
+            const dateTo = document.getElementById('exportDateTo').value;
+            const format = document.getElementById('exportFormat').value;
+            
+            if (account) params.append('account', account);
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+            params.append('format', format);
+        } else if (type === 'projects') {
+            url += 'projects';
+        } else if (type === 'full') {
+            url += 'full';
+        }
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+        
+        // Create download link
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = '';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+    } catch (error) {
+        alert('Export failed: ' + error.message);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Initialize page
+loadAccounts();
+</script>
+{% endblock %}
+

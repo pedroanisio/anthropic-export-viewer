@@ -1,0 +1,127 @@
+<!-- templates/index.html -->
+{% extends "base.html" %}
+{% block title %}Dashboard - Anthropic Data Manager{% endblock %}
+{% block content %}
+<h2 class="mb-4">Dashboard</h2>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-chat-dots"></i> Conversations</h5>
+                <h2>{{ stats.conversations }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-people"></i> Users</h5>
+                <h2>{{ stats.users }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-warning text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-folder"></i> Projects</h5>
+                <h2>{{ stats.projects }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-arrow-down-circle"></i> Imports</h5>
+                <h2>{{ stats.imports }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Imports -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5><i class="bi bi-clock-history"></i> Recent Imports</h5>
+    </div>
+    <div class="card-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Import ID</th>
+                    <th>Account</th>
+                    <th>Date</th>
+                    <th>Conversations</th>
+                    <th>Users</th>
+                    <th>Projects</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for import in stats.recent_imports %}
+                <tr>
+                    <td><code>{{ import.import_id }}</code></td>
+                    <td>{{ import.account_name }}</td>
+                    <td>{{ import.timestamp.strftime('%Y-%m-%d %H:%M') if import.timestamp else '' }}</td>
+                    <td>{{ import.conversations.loaded }} ({{ import.conversations.duplicates }} dup)</td>
+                    <td>{{ import.users.loaded }} ({{ import.users.duplicates }} dup)</td>
+                    <td>{{ import.projects.loaded }} ({{ import.projects.duplicates }} dup)</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Quick Search -->
+<div class="card">
+    <div class="card-header">
+        <h5><i class="bi bi-search"></i> Quick Search</h5>
+    </div>
+    <div class="card-body">
+        <div class="input-group">
+            <input type="text" class="form-control" id="quickSearch" placeholder="Search conversations...">
+            <button class="btn btn-primary" onclick="quickSearch()">
+                <i class="bi bi-search"></i> Search
+            </button>
+        </div>
+        <div id="searchResults" class="mt-3"></div>
+    </div>
+</div>
+
+<script>
+async function quickSearch() {
+    const query = document.getElementById('quickSearch').value;
+    
+    const response = await fetch('/api/search/conversations', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: query})
+    });
+    
+    const results = await response.json();
+    const resultsDiv = document.getElementById('searchResults');
+    
+    if (results.length === 0) {
+        resultsDiv.innerHTML = '<p class="text-muted">No results found</p>';
+        return;
+    }
+    
+    let html = '<div class="list-group">';
+    results.slice(0, 5).forEach(conv => {
+        html += `
+            <a href="/conversation/${conv.uuid}" class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${conv.name || 'Unnamed Conversation'}</h6>
+                    <small>${conv._account_name}</small>
+                </div>
+                <small class="text-muted">${conv.created_at}</small>
+            </a>
+        `;
+    });
+    html += '</div>';
+    
+    resultsDiv.innerHTML = html;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,531 @@
+<!-- templates/projects.html -->
+{% extends "base.html" %}
+{% block title %}Projects - Anthropic Data Manager{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Projects</h2>
+    <div class="project-stats">
+        <span class="badge bg-primary me-2">{{ stats.total_projects }} Total</span>
+        <span class="badge bg-success me-2">{{ stats.type_counts.public }} Public</span>
+        <span class="badge bg-warning me-2">{{ stats.type_counts.private }} Private</span>
+        <span class="badge bg-info">{{ stats.type_counts.starter }} Starter</span>
+    </div>
+</div>
+
+<!-- Search and Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <form method="GET" id="searchForm">
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="search" 
+                               placeholder="Search projects by name or description..." 
+                               value="{{ stats.search_query }}">
+                        <button class="btn btn-primary" type="submit">
+                            <i class="bi bi-search"></i> Search
+                        </button>
+                    </div>
+                    <input type="hidden" name="type" value="{{ stats.current_type }}">
+                    <input type="hidden" name="page" value="1">
+                </form>
+            </div>
+            <div class="col-md-6">
+                <div class="project-type-filters">
+                    <div class="btn-group" role="group">
+                        <a href="?type=all&search={{ stats.search_query }}" 
+                           class="btn btn-sm {{ 'btn-primary' if stats.current_type == 'all' else 'btn-outline-primary' }}">
+                            <i class="bi bi-collection"></i> All ({{ stats.type_counts.all }})
+                        </a>
+                        <a href="?type=public&search={{ stats.search_query }}" 
+                           class="btn btn-sm {{ 'btn-success' if stats.current_type == 'public' else 'btn-outline-success' }}">
+                            <i class="bi bi-globe"></i> Public ({{ stats.type_counts.public }})
+                        </a>
+                        <a href="?type=private&search={{ stats.search_query }}" 
+                           class="btn btn-sm {{ 'btn-warning' if stats.current_type == 'private' else 'btn-outline-warning' }}">
+                            <i class="bi bi-lock"></i> Private ({{ stats.type_counts.private }})
+                        </a>
+                        <a href="?type=starter&search={{ stats.search_query }}" 
+                           class="btn btn-sm {{ 'btn-info' if stats.current_type == 'starter' else 'btn-outline-info' }}">
+                            <i class="bi bi-star"></i> Starter ({{ stats.type_counts.starter }})
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Projects Grid -->
+{% if stats.projects %}
+<div class="row" id="projectsGrid">
+    {% for project in stats.projects %}
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="project-card card h-100" onclick="viewProjectDetails('{{ project.uuid }}')">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="project-title">
+                    <h6 class="mb-0">{{ project.name or 'Unnamed Project' }}</h6>
+                </div>
+                <div class="project-badges">
+                    {% if project.is_starter_project %}
+                        <span class="badge bg-info badge-sm">Starter</span>
+                    {% endif %}
+                    {% if project.is_private %}
+                        <span class="badge bg-warning badge-sm"><i class="bi bi-lock"></i> Private</span>
+                    {% else %}
+                        <span class="badge bg-success badge-sm"><i class="bi bi-globe"></i> Public</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card-body">
+                <div class="project-description mb-3">
+                    <p class="text-muted mb-2">
+                        {{ (project.description[:120] + '...') if project.description and project.description|length > 120 else (project.description or 'No description available') }}
+                    </p>
+                </div>
+                
+                <div class="project-meta">
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted">
+                                <i class="bi bi-calendar"></i> 
+                                {{ project.created_at[:10] if project.created_at else 'N/A' }}
+                            </small>
+                        </div>
+                        <div class="col-6 text-end">
+                            <small class="text-muted">
+                                <i class="bi bi-person"></i> 
+                                {{ project.creator or 'Unknown' }}
+                            </small>
+                        </div>
+                    </div>
+                    
+                    {% if project.updated_at and project.updated_at != project.created_at %}
+                    <div class="row mt-1">
+                        <div class="col-12">
+                            <small class="text-muted">
+                                <i class="bi bi-arrow-clockwise"></i> 
+                                Updated {{ project.updated_at[:10] }}
+                            </small>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card-footer bg-transparent">
+                <div class="project-actions d-flex justify-content-between align-items-center">
+                    <div class="project-stats-row d-flex flex-wrap gap-2">
+                        <!-- Document Count -->
+                        <div class="stat-item d-flex align-items-center">
+                            <i class="bi bi-file-text text-primary me-1"></i>
+                            <span class="stat-number">{{ project.docs_count or 0 }}</span>
+                            <small class="text-muted ms-1">doc{{ 's' if project.docs_count != 1 else '' }}</small>
+                        </div>
+                        
+                        <!-- Template Count -->
+                        <div class="stat-item d-flex align-items-center">
+                            <i class="bi bi-code-square text-success me-1"></i>
+                            <span class="stat-number">{{ project.templates_count or 0 }}</span>
+                            <small class="text-muted ms-1">template{{ 's' if project.templates_count != 1 else '' }}</small>
+                        </div>
+                        
+                        <!-- Artifacts Count (Generated files/content) -->
+                        <div class="stat-item d-flex align-items-center {{ 'has-artifacts' if project.artifacts_count and project.artifacts_count > 0 else '' }}">
+                            <i class="bi bi-file-earmark-code text-warning me-1"></i>
+                            <span class="stat-number">{{ project.artifacts_count or 0 }}</span>
+                            <small class="text-muted ms-1">artifact{{ 's' if project.artifacts_count != 1 else '' }}</small>
+                        </div>
+                        
+                        <!-- Related Conversations Count -->
+                        <div class="stat-item d-flex align-items-center">
+                            <i class="bi bi-chat-dots text-info me-1"></i>
+                            <span class="stat-number">{{ project.related_conversations_count or 0 }}</span>
+                            <small class="text-muted ms-1">conversation{{ 's' if project.related_conversations_count != 1 else '' }}</small>
+                        </div>
+                    </div>
+                    
+                    <div class="project-account">
+                        <small class="text-muted">
+                            <i class="bi bi-building"></i> {{ project._account_name or 'Unknown' }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if stats.pagination and stats.pagination.total_pages > 1 %}
+<nav aria-label="Projects pagination" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if stats.pagination.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ stats.pagination.page - 1 }}&type={{ stats.current_type }}&search={{ stats.search_query }}">Previous</a>
+            </li>
+        {% endif %}
+        
+        {% set start_page = [1, stats.pagination.page - 2]|max %}
+        {% set end_page = [stats.pagination.total_pages, stats.pagination.page + 2]|min %}
+        
+        {% if start_page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1&type={{ stats.current_type }}&search={{ stats.search_query }}">1</a>
+            </li>
+            {% if start_page > 2 %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endif %}
+        
+        {% for i in range(start_page, end_page + 1) %}
+            <li class="page-item {{ 'active' if i == stats.pagination.page else '' }}">
+                <a class="page-link" href="?page={{ i }}&type={{ stats.current_type }}&search={{ stats.search_query }}">{{ i }}</a>
+            </li>
+        {% endfor %}
+        
+        {% if end_page < stats.pagination.total_pages %}
+            {% if end_page < stats.pagination.total_pages - 1 %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ stats.pagination.total_pages }}&type={{ stats.current_type }}&search={{ stats.search_query }}">{{ stats.pagination.total_pages }}</a>
+            </li>
+        {% endif %}
+        
+        {% if stats.pagination.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ stats.pagination.page + 1 }}&type={{ stats.current_type }}&search={{ stats.search_query }}">Next</a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+
+<div class="text-center text-muted mt-2">
+    Showing {{ (stats.pagination.page - 1) * stats.pagination.per_page + 1 }} to {{ [stats.pagination.page * stats.pagination.per_page, stats.pagination.total_count]|min }} of {{ stats.pagination.total_count }} projects
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state text-center py-5">
+    <i class="bi bi-folder display-1 text-muted mb-3"></i>
+    <h4>No Projects Found</h4>
+    <p class="text-muted">
+        {% if stats.search_query or stats.current_type != 'all' %}
+            Try adjusting your search criteria or filters.
+        {% else %}
+            Upload some data to get started with your projects.
+        {% endif %}
+    </p>
+    {% if stats.search_query or stats.current_type != 'all' %}
+    <a href="?type=all&search=" class="btn btn-primary">
+        <i class="bi bi-arrow-clockwise"></i> Show All Projects
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Project Details Modal -->
+<div class="modal fade" id="projectModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="projectModalTitle">
+                    <i class="bi bi-folder me-2"></i>Project Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="projectModalBody">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading project details...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentProjectUuid = null;
+
+// View project details
+async function viewProjectDetails(uuid) {
+    currentProjectUuid = uuid;
+    
+    // Show modal immediately with loading state
+    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+    modal.show();
+    
+    try {
+        const response = await fetch(`/api/project/${uuid}`);
+        const project = await response.json();
+        
+        if (project.error) {
+            document.getElementById('projectModalBody').innerHTML = 
+                `<div class="alert alert-danger">Error: ${project.error}</div>`;
+            return;
+        }
+        
+        displayProjectDetails(project);
+    } catch (error) {
+        console.error('Error loading project:', error);
+        document.getElementById('projectModalBody').innerHTML = 
+            `<div class="alert alert-danger">Failed to load project details</div>`;
+    }
+}
+
+// Display project details in modal
+function displayProjectDetails(project) {
+    document.getElementById('projectModalTitle').innerHTML = 
+        `<i class="bi bi-folder me-2"></i>${project.name || 'Unnamed Project'}`;
+    
+    let html = `
+        <div class="project-detail-content">
+            <!-- Project Header -->
+            <div class="project-header mb-4">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h4>${project.name || 'Unnamed Project'}</h4>
+                        ${project.description ? `<p class="text-muted">${project.description}</p>` : ''}
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="project-badges mb-2">
+                            ${project.is_starter_project ? '<span class="badge bg-info me-1">Starter Project</span>' : ''}
+                            ${project.is_private ? 
+                                '<span class="badge bg-warning"><i class="bi bi-lock"></i> Private</span>' : 
+                                '<span class="badge bg-success"><i class="bi bi-globe"></i> Public</span>'
+                            }
+                        </div>
+                        <div class="project-meta-info">
+                            <small class="text-muted d-block">
+                                <i class="bi bi-person"></i> ${project.creator || 'Unknown Creator'}
+                            </small>
+                            <small class="text-muted d-block">
+                                <i class="bi bi-calendar"></i> Created ${formatDate(project.created_at)}
+                            </small>
+                            ${project.updated_at && project.updated_at !== project.created_at ? 
+                                `<small class="text-muted d-block">
+                                    <i class="bi bi-arrow-clockwise"></i> Updated ${formatDate(project.updated_at)}
+                                </small>` : ''
+                            }
+                            <small class="text-muted d-block">
+                                <i class="bi bi-building"></i> ${project._account_name || 'Unknown Account'}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Project Content Tabs -->
+            <nav>
+                <div class="nav nav-tabs" id="projectTabs" role="tablist">
+                    ${project.docs && project.docs.length > 0 ? '<button class="nav-link active" data-bs-toggle="tab" data-bs-target="#docs-tab" type="button">📄 Documentation</button>' : ''}
+                    ${project.prompt_template && project.prompt_template.length > 0 ? `<button class="nav-link ${(!project.docs || project.docs.length === 0) ? 'active' : ''}" data-bs-toggle="tab" data-bs-target="#template-tab" type="button">🔧 Prompt Template</button>` : ''}
+                    <button class="nav-link ${(!project.docs || project.docs.length === 0) && (!project.prompt_template || project.prompt_template.length === 0) ? 'active' : ''}" data-bs-toggle="tab" data-bs-target="#conversations-tab" type="button">💬 Related Conversations</button>
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#metadata-tab" type="button">ℹ️ Metadata</button>
+                </div>
+            </nav>
+            
+            <div class="tab-content mt-3" id="projectTabContent">
+                ${project.docs && project.docs.length > 0 ? `
+                <div class="tab-pane fade show active" id="docs-tab">
+                    <div class="content-viewer">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6>📄 Project Documentation (${project.docs.length} document${project.docs.length > 1 ? 's' : ''})</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('docs')">
+                                <i class="bi bi-clipboard"></i> Copy All
+                            </button>
+                        </div>
+                        <div class="content-display" style="max-height: 500px; overflow-y: auto;">
+                            <div id="docs-content">
+                                ${project.docs.map((doc, index) => `
+                                    <div class="document-section ${index > 0 ? 'mt-4 pt-3 border-top' : ''}">
+                                        ${project.docs.length > 1 ? `
+                                        <div class="document-header mb-2">
+                                            <h6 class="text-primary mb-1">
+                                                📄 ${doc.filename || `Document ${index + 1}`}
+                                                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyDocumentContent(${index})" title="Copy this document">
+                                                    <i class="bi bi-clipboard"></i>
+                                                </button>
+                                            </h6>
+                                            <small class="text-muted">
+                                                ${doc.created_at ? `Created: ${formatDate(doc.created_at)}` : ''}
+                                                ${doc.uuid ? ` • ID: ${doc.uuid.substring(0, 8)}...` : ''}
+                                            </small>
+                                        </div>
+                                        ` : ''}
+                                        <div class="document-content" data-doc-index="${index}">
+                                            <pre><code>${escapeHtml(doc.content || 'No content available')}</code></pre>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${project.prompt_template && project.prompt_template.length > 0 ? `
+                <div class="tab-pane fade ${!project.docs || project.docs.length === 0 ? 'show active' : ''}" id="template-tab">
+                    <div class="content-viewer">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6>🔧 Prompt Template (${project.prompt_template.length} template${project.prompt_template.length > 1 ? 's' : ''})</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('template')">
+                                <i class="bi bi-clipboard"></i> Copy All
+                            </button>
+                        </div>
+                        <div class="content-display" style="max-height: 500px; overflow-y: auto;">
+                            <div id="template-content">
+                                ${project.prompt_template.map((template, index) => `
+                                    <div class="template-section ${index > 0 ? 'mt-4 pt-3 border-top' : ''}">
+                                        ${project.prompt_template.length > 1 ? `
+                                        <div class="template-header mb-2">
+                                            <h6 class="text-success mb-1">
+                                                🔧 ${template.filename || `Template ${index + 1}`}
+                                                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyTemplateContent(${index})" title="Copy this template">
+                                                    <i class="bi bi-clipboard"></i>
+                                                </button>
+                                            </h6>
+                                            <small class="text-muted">
+                                                ${template.created_at ? `Created: ${formatDate(template.created_at)}` : ''}
+                                                ${template.uuid ? ` • ID: ${template.uuid.substring(0, 8)}...` : ''}
+                                            </small>
+                                        </div>
+                                        ` : ''}
+                                        <div class="template-content" data-template-index="${index}">
+                                            <pre><code>${escapeHtml(template.content || 'No content available')}</code></pre>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div class="tab-pane fade ${(!project.docs || project.docs.length === 0) && (!project.prompt_template || project.prompt_template.length === 0) ? 'show active' : ''}" id="conversations-tab">
+                    <div class="related-conversations">
+                        <h6>💬 Related Conversations</h6>
+                        ${project.related_conversations && project.related_conversations.length > 0 ? `
+                            <div class="list-group">
+                                ${project.related_conversations.map(conv => `
+                                    <div class="list-group-item list-group-item-action" onclick="openConversation('${conv.uuid}')">
+                                        <div class="d-flex justify-content-between">
+                                            <h6 class="mb-1">${conv.name || 'Unnamed Conversation'}</h6>
+                                            <small class="text-muted">${conv._account_name}</small>
+                                        </div>
+                                        <small class="text-muted">Created ${formatDate(conv.created_at)}</small>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<p class="text-muted">No related conversations found.</p>'}
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="metadata-tab">
+                    <div class="metadata-viewer">
+                        <h6>ℹ️ Project Metadata</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr><td><strong>UUID</strong></td><td><code>${project.uuid}</code></td></tr>
+                                    <tr><td><strong>Name</strong></td><td>${project.name || 'N/A'}</td></tr>
+                                    <tr><td><strong>Creator</strong></td><td>${project.creator || 'N/A'}</td></tr>
+                                    <tr><td><strong>Account</strong></td><td>${project._account_name || 'N/A'}</td></tr>
+                                    <tr><td><strong>Created</strong></td><td>${formatDate(project.created_at)}</td></tr>
+                                    <tr><td><strong>Updated</strong></td><td>${formatDate(project.updated_at)}</td></tr>
+                                    <tr><td><strong>Private</strong></td><td>${project.is_private ? 'Yes' : 'No'}</td></tr>
+                                    <tr><td><strong>Starter Project</strong></td><td>${project.is_starter_project ? 'Yes' : 'No'}</td></tr>
+                                    <tr><td><strong>Import ID</strong></td><td><code>${project._import_id || 'N/A'}</code></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('projectModalBody').innerHTML = html;
+}
+
+// Helper functions
+function formatDate(dateStr) {
+    if (!dateStr) return 'N/A';
+    return new Date(dateStr).toLocaleDateString() + ' ' + new Date(dateStr).toLocaleTimeString();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function copyToClipboard(contentType) {
+    const elementId = contentType === 'docs' ? 'docs-content' : 'template-content';
+    const element = document.getElementById(elementId);
+    const text = element.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        // Show success feedback
+        const button = event.target.closest('button');
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check"></i> Copied!';
+        button.classList.add('btn-success');
+        button.classList.remove('btn-outline-primary');
+        
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-primary');
+        }, 2000);
+    });
+}
+
+function copyDocumentContent(docIndex) {
+    const element = document.querySelector(`[data-doc-index="${docIndex}"] code`);
+    if (!element) return;
+    
+    const text = element.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        showCopyFeedback(event.target.closest('button'));
+    });
+}
+
+function copyTemplateContent(templateIndex) {
+    const element = document.querySelector(`[data-template-index="${templateIndex}"] code`);
+    if (!element) return;
+    
+    const text = element.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        showCopyFeedback(event.target.closest('button'));
+    });
+}
+
+function showCopyFeedback(button) {
+    const originalContent = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-check"></i>';
+    button.classList.add('btn-success');
+    button.classList.remove('btn-outline-secondary');
+    
+    setTimeout(() => {
+        button.innerHTML = originalContent;
+        button.classList.remove('btn-success');
+        button.classList.add('btn-outline-secondary');
+    }, 1500);
+}
+
+function openConversation(uuid) {
+    // Close project modal and open conversation
+    bootstrap.Modal.getInstance(document.getElementById('projectModal')).hide();
+    window.location.href = `/conversations?conversation=${uuid}`;
+}
+</script>
+{% endblock %}

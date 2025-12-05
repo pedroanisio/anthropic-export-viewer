@@ -1,0 +1,1024 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Anthropic Data Manager{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .stat-card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        .conversation-item {
+            border-left: 4px solid #667eea;
+            margin-bottom: 15px;
+            padding: 18px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .conversation-item:hover {
+            background: #e9ecef;
+            border-left-color: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        /* Engagement Level Styling */
+        .conversation-item.engagement-high {
+            border-left-color: #28a745;
+        }
+        .conversation-item.engagement-medium {
+            border-left-color: #ffc107;
+        }
+        .conversation-item.engagement-low {
+            border-left-color: #6c757d;
+        }
+        
+        /* Conversation Header */
+        .conversation-header {
+            margin-bottom: 8px;
+        }
+        
+        .conversation-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-right: 8px;
+        }
+        
+        .engagement-badge {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+        
+        .account-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+        }
+        
+        /* Conversation Stats */
+        .conversation-stats {
+            border-top: 1px solid rgba(0,0,0,0.1);
+            padding-top: 8px;
+        }
+        
+        /* Interaction Metrics */
+        .interaction-metrics {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        .metric-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: #666;
+            padding: 2px 6px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+        
+        .metric-item:hover {
+            background: rgba(102, 126, 234, 0.2);
+            color: #333;
+        }
+        
+        .metric-item i {
+            font-size: 11px;
+        }
+        
+        /* Sort Controls Styling */
+        .btn-group .btn.active {
+            background-color: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+        
+        .btn-group .btn:hover {
+            background-color: #5a6fd8;
+            border-color: #5a6fd8;
+            color: white;
+        }
+        
+        /* Responsive Design for Conversation Items */
+        @media (max-width: 768px) {
+            .conversation-item {
+                padding: 15px;
+            }
+            
+            .interaction-metrics {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+                margin-top: 8px;
+            }
+            
+            .metric-item {
+                font-size: 11px;
+            }
+            
+            .conversation-stats .row {
+                flex-direction: column;
+            }
+            
+            .conversation-stats .col-md-4 {
+                margin-top: 8px;
+            }
+        }
+        
+        /* Loading and Empty States */
+        .conversations-loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .conversations-empty {
+            text-align: center;
+            padding: 60px 40px;
+            color: #666;
+        }
+        
+        .conversations-empty i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            color: #ccc;
+        }
+        
+        /* Sort Controls Enhancement */
+        .sort-controls {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .sort-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .message-bubble {
+            padding: 16px 20px;
+            border-radius: 18px;
+            margin-bottom: 15px;
+            max-width: 85%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .message-human {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            margin-left: auto;
+            border-bottom-right-radius: 6px;
+        }
+        .message-assistant {
+            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+            margin-right: auto;
+            border-bottom-left-radius: 6px;
+        }
+        .message-header-bar {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+        .sender-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .timestamp {
+            font-size: 12px;
+        }
+        .message-content {
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        .message-content p {
+            margin: 0 0 12px 0;
+        }
+        .message-content p:last-child {
+            margin-bottom: 0;
+        }
+        .numbered-item, .bullet-item {
+            margin: 8px 0;
+            padding-left: 0;
+            display: flex;
+            align-items: flex-start;
+        }
+        .item-number {
+            font-weight: 600;
+            color: #666;
+            margin-right: 8px;
+            min-width: 24px;
+        }
+        .bullet {
+            color: #666;
+            margin-right: 8px;
+            font-weight: bold;
+            min-width: 12px;
+        }
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 12px 0;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .inline-code {
+            background: #f1f3f4;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            color: #d63384;
+        }
+        .message-header {
+            color: #333;
+            font-weight: 600;
+            margin: 16px 0 8px 0;
+            padding-bottom: 4px;
+            border-bottom: 2px solid #667eea;
+        }
+        .attachments-info {
+            background: rgba(255,255,255,0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+        .messages-container {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+        .messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .messages-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+        .copy-btn {
+            opacity: 0.6;
+            transition: all 0.2s ease;
+            border: none !important;
+            padding: 4px 8px;
+        }
+        .message-bubble:hover .copy-btn {
+            opacity: 1;
+        }
+        .copy-btn:hover {
+            background-color: #f8f9fa !important;
+            transform: scale(1.1);
+        }
+        .copy-btn.btn-success {
+            opacity: 1;
+        }
+        
+        /* Artifact Indicators in Conversation List */
+        .attachment-indicator {
+            font-size: 14px;
+            animation: pulse 2s infinite;
+        }
+        
+        .has-attachments {
+            border-left-color: #17a2b8 !important;
+        }
+        
+        .has-attachments:hover {
+            border-left-color: #138496 !important;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        /* Attachments Section in Messages */
+        .attachments-section {
+            background: rgba(255,255,255,0.4);
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+        
+        .attachments-header {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .attachments-header i {
+            color: #17a2b8;
+        }
+        
+        /* Individual Attachment Items */
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: rgba(255,255,255,0.6);
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .attachment-item:hover {
+            background: rgba(255,255,255,0.9);
+            border-color: #17a2b8;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .attachment-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+        
+        .attachment-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            color: #6c757d;
+        }
+        
+        .attachment-icon i {
+            font-size: 16px;
+        }
+        
+        .attachment-details {
+            flex: 1;
+        }
+        
+        .attachment-filename {
+            font-weight: 500;
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 2px;
+            word-break: break-all;
+        }
+        
+        .attachment-meta {
+            font-size: 11px;
+            color: #666;
+        }
+        
+        .attachment-actions {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .attachment-actions .btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            border-width: 1px;
+        }
+        
+        .attachment-actions .btn:hover {
+            transform: scale(1.05);
+        }
+        
+        /* Attachment Preview Modal */
+        .attachment-preview {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        
+        .attachment-preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .attachment-preview pre {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            font-size: 12px;
+            line-height: 1.4;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .attachment-preview code {
+            color: #d63384;
+        }
+        
+        /* File Type Specific Colors */
+        .attachment-item[data-file-type="image"] .attachment-icon {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .attachment-item[data-file-type="document"] .attachment-icon {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .attachment-item[data-file-type="code"] .attachment-icon {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .attachment-item[data-file-type="archive"] .attachment-icon {
+            background: #e8f5e8;
+            color: #388e3c;
+        }
+        
+        /* Responsive Design for Attachments */
+        @media (max-width: 768px) {
+            .attachment-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .attachment-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+            
+            .attachment-actions .btn {
+                flex: 0 0 auto;
+            }
+        }
+        
+        /* Enhanced Projects Styling */
+        .project-stats .badge {
+            font-size: 0.875rem;
+            padding: 0.5em 0.75em;
+        }
+        
+        .project-type-filters .btn-group {
+            width: 100%;
+        }
+        
+        .project-type-filters .btn {
+            flex: 1;
+            font-size: 0.875rem;
+        }
+        
+        /* Project Cards */
+        .project-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #e0e4e7;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .project-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+            border-color: #667eea;
+        }
+        
+        .project-card .card-header {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-bottom: 1px solid #e0e4e7;
+            padding: 1rem 1.25rem;
+        }
+        
+        .project-title h6 {
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+        
+        .project-badges .badge {
+            font-size: 0.75rem;
+            margin-left: 0.25rem;
+        }
+        
+        .project-card .card-body {
+            padding: 1.25rem;
+            flex: 1;
+        }
+        
+        .project-description p {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #666;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .project-meta {
+            font-size: 0.8rem;
+            border-top: 1px solid #f0f0f0;
+            padding-top: 0.75rem;
+        }
+        
+        .project-meta i {
+            width: 12px;
+            text-align: center;
+        }
+        
+        .project-card .card-footer {
+            padding: 0.75rem 1.25rem;
+            background: rgba(102, 126, 234, 0.03);
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .content-indicators .badge {
+            font-size: 0.7rem;
+            padding: 0.25em 0.5em;
+            border: 1px solid #ddd;
+        }
+        
+        /* Project Detail Modal */
+        .project-detail-content {
+            max-width: 100%;
+        }
+        
+        .project-header {
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #667eea;
+            margin-bottom: 1.5rem;
+        }
+        
+        .project-header h4 {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .project-badges .badge {
+            font-size: 0.8rem;
+            padding: 0.4em 0.8em;
+        }
+        
+        .project-meta-info {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        
+        /* Content Viewer */
+        .content-viewer {
+            background: #fff;
+            border: 1px solid #e0e4e7;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        
+        .content-display {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .content-display pre {
+            margin: 0;
+            padding: 1.5rem;
+            background: transparent;
+            border: none;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .content-display code {
+            background: transparent;
+            color: #333;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        
+        /* Related Conversations */
+        .related-conversations .list-group-item {
+            border-left: 4px solid transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .related-conversations .list-group-item:hover {
+            border-left-color: #667eea;
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        
+        /* Metadata Viewer */
+        .metadata-viewer .table {
+            margin-bottom: 0;
+        }
+        
+        .metadata-viewer .table td:first-child {
+            width: 30%;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .metadata-viewer .table td {
+            border-top: 1px solid #f0f0f0;
+            padding: 0.75rem 0.5rem;
+        }
+        
+        .metadata-viewer code {
+            background: #f1f3f4;
+            padding: 0.25em 0.5em;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: #d63384;
+        }
+        
+        /* Tab Navigation */
+        .nav-tabs {
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #666;
+            font-weight: 500;
+            padding: 0.75rem 1.5rem;
+            margin-bottom: -2px;
+            background: transparent;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            border-bottom: 3px solid #667eea;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            color: #666;
+        }
+        
+        .empty-state i {
+            color: #ccc !important;
+        }
+        
+        /* Badge Styling */
+        .badge-sm {
+            font-size: 0.7rem;
+            padding: 0.25em 0.5em;
+        }
+        
+        /* Responsive Design for Projects */
+        @media (max-width: 768px) {
+            .project-type-filters {
+                margin-top: 1rem;
+            }
+            
+            .project-type-filters .btn-group {
+                flex-direction: column;
+            }
+            
+            .project-type-filters .btn {
+                margin-bottom: 0.25rem;
+                border-radius: 0.375rem !important;
+            }
+            
+            .project-stats {
+                margin-top: 1rem;
+                text-align: center;
+            }
+            
+            .project-card .card-header {
+                padding: 0.75rem 1rem;
+            }
+            
+            .project-card .card-body {
+                padding: 1rem;
+            }
+            
+            .project-detail-content .row {
+                flex-direction: column;
+            }
+            
+            .project-meta-info {
+                margin-top: 1rem;
+            }
+        }
+        
+        /* Loading States */
+        .projects-loading {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+        
+        /* Search Form Enhancement */
+        #searchForm .input-group .form-control {
+            border-right: none;
+        }
+        
+        #searchForm .input-group .btn {
+            border-left: none;
+            background: #667eea;
+            border-color: #667eea;
+        }
+        
+        #searchForm .input-group .btn:hover {
+            background: #5a6fd8;
+            border-color: #5a6fd8;
+        }
+        
+        /* Animation for project cards */
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .project-card {
+            animation: slideInUp 0.3s ease-out;
+        }
+        
+        /* Enhanced Document and Template Styling */
+        .document-section, .template-section {
+            border-left: 3px solid transparent;
+            padding-left: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        
+        .document-section:hover, .template-section:hover {
+            border-left-color: #667eea;
+            background-color: rgba(102, 126, 234, 0.02);
+        }
+        
+        .document-header, .template-header {
+            background: rgba(102, 126, 234, 0.05);
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .document-header h6, .template-header h6 {
+            margin: 0;
+            font-size: 0.95rem;
+        }
+        
+        .document-content, .template-content {
+            background: #f8f9fa;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .document-content pre, .template-content pre {
+            margin: 0;
+            padding: 1rem;
+            background: transparent;
+            border: none;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .document-content code, .template-content code {
+            background: transparent;
+            color: #333;
+        }
+        
+        /* Multiple document indicator */
+        .content-display .document-section + .document-section,
+        .content-display .template-section + .template-section {
+            border-top: 2px solid #e9ecef;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+        }
+        
+        /* Document count badge in tab */
+        .nav-tabs .nav-link {
+            position: relative;
+        }
+        
+        .document-count-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #dc3545;
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Project Stats Styling */
+        .project-stats-row {
+            flex: 1;
+            min-height: 24px;
+        }
+        
+        .stat-item {
+            background: rgba(102, 126, 234, 0.05);
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            border: 1px solid rgba(102, 126, 234, 0.1);
+            transition: all 0.2s ease;
+            min-width: fit-content;
+        }
+        
+        .stat-item:hover {
+            background: rgba(102, 126, 234, 0.1);
+            border-color: rgba(102, 126, 234, 0.2);
+            transform: translateY(-1px);
+        }
+        
+        .stat-item i {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+        
+        .stat-number {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #333;
+        }
+        
+        .stat-item small {
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+        
+        .project-account {
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+        
+        /* Responsive adjustments for project stats */
+        @media (max-width: 576px) {
+            .project-actions {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .project-stats-row {
+                justify-content: center;
+            }
+            
+            .project-account {
+                margin-left: 0;
+                align-self: center;
+            }
+            
+            .stat-item {
+                font-size: 0.8rem;
+            }
+        }
+        
+        /* Zero state styling */
+        .stat-item .stat-number:has-text("0") {
+            opacity: 0.6;
+        }
+        
+        .stat-item:has(.stat-number:contains("0")) {
+            background: rgba(108, 117, 125, 0.05);
+            border-color: rgba(108, 117, 125, 0.1);
+        }
+        
+        .stat-item:has(.stat-number:contains("0")) i {
+            opacity: 0.5;
+        }
+        
+        /* Artifact-specific styling */
+        .stat-item.has-artifacts {
+            background: rgba(255, 193, 7, 0.1);
+            border-color: rgba(255, 193, 7, 0.3);
+            box-shadow: 0 2px 4px rgba(255, 193, 7, 0.1);
+        }
+        
+        .stat-item.has-artifacts:hover {
+            background: rgba(255, 193, 7, 0.15);
+            border-color: rgba(255, 193, 7, 0.4);
+            box-shadow: 0 4px 8px rgba(255, 193, 7, 0.15);
+        }
+        
+        .stat-item.has-artifacts i {
+            opacity: 1;
+            color: #f0ad4e !important;
+        }
+        
+        .stat-item.has-artifacts .stat-number {
+            color: #e67e22;
+            font-weight: 700;
+        }
+        
+        /* Pulse animation for high artifact counts */
+        .stat-item.has-artifacts .stat-number[data-count]:after {
+            content: attr(data-count);
+        }
+        
+        .project-card:has(.has-artifacts) {
+            box-shadow: 0 4px 15px rgba(255, 193, 7, 0.1);
+        }
+        
+        .project-card:has(.has-artifacts):hover {
+            box-shadow: 0 8px 25px rgba(255, 193, 7, 0.2);
+        }
+        .upload-zone {
+            border: 3px dashed #667eea;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .upload-zone:hover {
+            background: #f8f9fa;
+            border-color: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-2 sidebar text-white p-4">
+                <h4 class="mb-4"><i class="bi bi-robot"></i> Anthropic Data</h4>
+                <nav class="nav flex-column">
+                    <a class="nav-link text-white" href="/"><i class="bi bi-house"></i> Dashboard</a>
+                    <a class="nav-link text-white" href="/upload"><i class="bi bi-upload"></i> Import Data</a>
+                    <a class="nav-link text-white" href="/conversations"><i class="bi bi-chat-dots"></i> Conversations</a>
+                    <a class="nav-link text-white" href="/projects"><i class="bi bi-folder"></i> Projects</a>
+                    <a class="nav-link text-white" href="/analytics"><i class="bi bi-graph-up"></i> Analytics</a>
+                    <a class="nav-link text-white" href="/export"><i class="bi bi-download"></i> Export</a>
+                </nav>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="col-md-10 p-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

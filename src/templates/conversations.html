@@ -1,0 +1,940 @@
+<!-- templates/conversations.html -->
+{% extends "base.html" %}
+{% block title %}Conversations - Anthropic Data Manager{% endblock %}
+{% block content %}
+<h2 class="mb-4">Conversations</h2>
+
+<!-- Search and Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control" id="searchQuery" placeholder="Search conversations...">
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="accountFilter">
+                    <option value="">All Accounts</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="sortBy">
+                    <option value="created_at">Date Created</option>
+                    <option value="updated_at">Last Updated</option>
+                    <option value="name">Name</option>
+                    <option value="message_count">Messages Count</option>
+                    <option value="attachment_count">Artifacts</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="sortOrder">
+                    <option value="desc">Newest First</option>
+                    <option value="asc">Oldest First</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100" onclick="searchConversations()">
+                    <i class="bi bi-search"></i> Search
+                </button>
+            </div>
+        </div>
+        
+        <!-- Quick Sort Buttons -->
+        <div class="row">
+            <div class="col-12">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Quick sort">
+                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('created_at', 'desc')">
+                        <i class="bi bi-clock"></i> Recent
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('name', 'asc')">
+                        <i class="bi bi-sort-alpha-down"></i> A-Z
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('message_count', 'desc')">
+                        <i class="bi bi-chat-dots"></i> Most Active
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('attachment_count', 'desc')">
+                        <i class="bi bi-file-earmark-code"></i> Most Artifacts
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results Summary -->
+<div id="resultsSummary" class="alert alert-info" style="display: none;">
+    <div class="d-flex justify-content-between align-items-center">
+        <span id="summaryText"></span>
+        <small id="sortInfo" class="text-muted"></small>
+    </div>
+</div>
+
+<!-- Results -->
+<div id="conversationsList"></div>
+
+<!-- Pagination Controls -->
+<div id="paginationControls" class="mt-4"></div>
+
+<!-- Conversation Modal -->
+<div class="modal fade" id="conversationModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 90vw;">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="conversationTitle">
+                    <i class="bi bi-chat-dots me-2"></i>Conversation
+                </h5>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="exportConversation()">
+                        <i class="bi bi-download"></i> Export JSON
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body p-4" id="conversationContent" style="min-height: 60vh;">
+                <!-- Messages will be loaded here -->
+            </div>
+            <div class="modal-footer bg-light">
+                <small class="text-muted me-auto">Use the Export button to save this conversation as JSON</small>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentConversationUuid = null;
+let currentPage = 1;
+let currentQuery = '';
+let currentFilters = {};
+
+// Load accounts for filter
+async function loadAccounts() {
+    const response = await fetch('/api/accounts');
+    const accounts = await response.json();
+    
+    const select = document.getElementById('accountFilter');
+    accounts.forEach(account => {
+        const option = document.createElement('option');
+        option.value = account;
+        option.textContent = account;
+        select.appendChild(option);
+    });
+}
+
+// Search conversations
+async function searchConversations(page = 1) {
+    currentPage = page;
+    currentQuery = document.getElementById('searchQuery').value;
+    currentFilters = {account: document.getElementById('accountFilter').value};
+    
+    const sortBy = document.getElementById('sortBy').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+    
+    const response = await fetch('/api/search/conversations', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            query: currentQuery,
+            filters: currentFilters,
+            page: page,
+            per_page: 20,
+            sort_by: sortBy,
+            sort_order: sortOrder
+        })
+    });
+    
+    const data = await response.json();
+    displayConversations(data.conversations);
+    displayPagination(data.pagination);
+    displayResultsSummary(data.pagination, data.sort_info);
+}
+
+// Quick sort function
+function quickSort(sortBy, sortOrder) {
+    document.getElementById('sortBy').value = sortBy;
+    document.getElementById('sortOrder').value = sortOrder;
+    
+    // Update sort order label
+    const sortOrderSelect = document.getElementById('sortOrder');
+    if (sortBy === 'name') {
+        sortOrderSelect.innerHTML = `
+            <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>A-Z</option>
+            <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Z-A</option>
+        `;
+    } else if (sortBy === 'message_count' || sortBy === 'attachment_count') {
+        sortOrderSelect.innerHTML = `
+            <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Most First</option>
+            <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>Least First</option>
+        `;
+    } else {
+        sortOrderSelect.innerHTML = `
+            <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Newest First</option>
+            <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>Oldest First</option>
+        `;
+    }
+    
+    // Update button active state
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    searchConversations(1);
+}
+
+// Display conversation list
+function displayConversations(conversations) {
+    const container = document.getElementById('conversationsList');
+    
+    if (conversations.length === 0) {
+        container.innerHTML = '<div class="alert alert-info">No conversations found</div>';
+        return;
+    }
+    
+    let html = '';
+    conversations.forEach(conv => {
+        // Use computed fields from API
+        const messageCount = conv.message_count || 0;
+        const attachmentCount = conv.attachment_count || 0;
+        const hasAttachments = attachmentCount > 0;
+        const userMessages = conv.user_message_count || 0;
+        const assistantMessages = conv.assistant_message_count || 0;
+        
+        // Calculate engagement level
+        const engagementLevel = messageCount > 20 ? 'high' : messageCount > 10 ? 'medium' : 'low';
+        const engagementColor = engagementLevel === 'high' ? 'success' : engagementLevel === 'medium' ? 'warning' : 'secondary';
+        
+        // Format dates
+        const createdDate = new Date(conv.created_at).toLocaleDateString();
+        const updatedDate = conv.updated_at ? new Date(conv.updated_at).toLocaleDateString() : createdDate;
+        
+        html += `
+            <div class="conversation-item ${hasAttachments ? 'has-attachments' : ''} engagement-${engagementLevel}" onclick="viewConversation('${conv.uuid}')">
+                <div class="conversation-header d-flex justify-content-between align-items-start">
+                    <div class="conversation-title-section d-flex align-items-center gap-2 flex-grow-1">
+                        <h6 class="mb-0 conversation-title">${conv.name || 'Unnamed Conversation'}</h6>
+                        ${hasAttachments ? `<i class="bi bi-file-earmark-code text-warning attachment-indicator" title="${attachmentCount} artifact(s)"></i>` : ''}
+                        <span class="badge bg-${engagementColor} engagement-badge" title="Engagement Level">${messageCount}</span>
+                    </div>
+                    <span class="badge bg-secondary account-badge">${conv._account_name}</span>
+                </div>
+                
+                <div class="conversation-stats mt-2">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <small class="text-muted">
+                                <i class="bi bi-calendar3"></i> Created ${createdDate}
+                                ${updatedDate !== createdDate ? `| <i class="bi bi-arrow-clockwise"></i> Updated ${updatedDate}` : ''}
+                            </small>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="interaction-metrics">
+                                <span class="metric-item" title="Total Messages">
+                                    <i class="bi bi-chat-dots"></i> ${messageCount}
+                                </span>
+                                ${userMessages > 0 ? `
+                                <span class="metric-item" title="Your Messages">
+                                    <i class="bi bi-person"></i> ${userMessages}
+                                </span>` : ''}
+                                ${assistantMessages > 0 ? `
+                                <span class="metric-item" title="Assistant Messages">
+                                    <i class="bi bi-robot"></i> ${assistantMessages}
+                                </span>` : ''}
+                                ${hasAttachments ? `
+                                <span class="metric-item" title="Artifacts">
+                                    <i class="bi bi-file-earmark-code"></i> ${attachmentCount}
+                                </span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Format message text with better styling
+function formatMessageText(text) {
+    if (!text) return '';
+    
+    // Escape HTML to prevent XSS
+    text = text.replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;')
+               .replace(/"/g, '&quot;')
+               .replace(/'/g, '&#039;');
+    
+    // Convert line breaks to HTML
+    text = text.replace(/\n\n+/g, '</p><p>')  // Paragraph breaks
+               .replace(/\n/g, '<br>');         // Line breaks
+    
+    // Format numbered lists (1. 2. 3. etc.)
+    text = text.replace(/^(\d+\.\s+)(.+?)(?=<br>|$)/gm, '<div class="numbered-item"><span class="item-number">$1</span>$2</div>');
+    
+    // Format bullet points (- or *)
+    text = text.replace(/^([-*]\s+)(.+?)(?=<br>|$)/gm, '<div class="bullet-item"><span class="bullet">•</span>$2</div>');
+    
+    // Format bold text (**text**)
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // Format code blocks (```code```)
+    text = text.replace(/```([^`]+)```/g, '<pre class="code-block"><code>$1</code></pre>');
+    
+    // Format inline code (`code`)
+    text = text.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    
+    // Format headers (# ## ###)
+    text = text.replace(/^(#{1,3})\s+(.+?)(?=<br>|$)/gm, function(match, hashes, content) {
+        const level = hashes.length;
+        return `<h${level + 3} class="message-header">${content}</h${level + 3}>`;
+    });
+    
+    // Wrap in paragraphs if there are paragraph breaks
+    if (text.includes('</p><p>')) {
+        text = '<p>' + text + '</p>';
+    }
+    
+    return text;
+}
+
+// View single conversation
+async function viewConversation(uuid) {
+    currentConversationUuid = uuid;
+    
+    const response = await fetch(`/api/conversation/${uuid}`);
+    const conversation = await response.json();
+    
+    document.getElementById('conversationTitle').textContent = conversation.name || 'Conversation';
+    
+    let html = '<div class="messages-container">';
+    conversation.chat_messages.forEach((msg, index) => {
+        const isHuman = msg.sender === 'human';
+        const formattedText = formatMessageText(msg.text);
+        
+        html += `
+            <div class="message-bubble ${isHuman ? 'message-human' : 'message-assistant'}">
+                <div class="message-header-bar d-flex justify-content-between align-items-center">
+                    <strong class="sender-name">${isHuman ? '👤 You' : '🤖 Claude'}</strong>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                                onclick="copyMessage(${index})" 
+                                title="Copy message text">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                        <small class="text-muted timestamp">${new Date(msg.created_at).toLocaleString()}</small>
+                    </div>
+                </div>
+                <div class="message-content" id="message-${index}">${formattedText}</div>
+                ${msg.sender === 'human' && msg.attachments && msg.attachments.length > 0 ? 
+                    generateUserAttachmentsHTML(msg.attachments, conversation.uuid, index) : ''}
+                ${msg.sender === 'assistant' && msg.content && msg.content.length > 0 ? 
+                    generateAssistantArtifactsHTML(msg.content, conversation.uuid, index) : ''}
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    document.getElementById('conversationContent').innerHTML = html;
+    
+    const modal = new bootstrap.Modal(document.getElementById('conversationModal'));
+    modal.show();
+}
+
+// Export conversation
+function exportConversation() {
+    if (currentConversationUuid) {
+        window.location.href = `/api/export/conversation/${currentConversationUuid}`;
+    }
+}
+
+// Generate user attachments HTML (files uploaded by users)
+function generateUserAttachmentsHTML(attachments, conversationUuid, messageIndex) {
+    if (!attachments || attachments.length === 0) return '';
+    
+    let html = '<div class="attachments-section mt-3">';
+    html += '<div class="attachments-header">';
+    html += `<i class="bi bi-paperclip"></i> <strong>${attachments.length} Attachment(s)</strong>`;
+    html += '</div>';
+    
+    attachments.forEach((attachment, attachmentIndex) => {
+        const filename = attachment.file_name || attachment.filename || attachment.name || `attachment_${attachmentIndex}`;
+        const fileType = getFileType(filename);
+        const fileIcon = getFileIcon(fileType);
+        const fileSize = formatFileSize(attachment.file_size || attachment.size || 0);
+        
+        html += `
+            <div class="attachment-item" data-attachment-index="${attachmentIndex}" data-file-type="${fileType}">
+                <div class="attachment-info">
+                    <div class="attachment-icon">
+                        <i class="bi ${fileIcon}"></i>
+                    </div>
+                    <div class="attachment-details">
+                        <div class="attachment-filename">${filename}</div>
+                        <div class="attachment-meta text-muted">
+                            ${fileType.toUpperCase()} ${fileSize ? `• ${fileSize}` : ''} • User Upload
+                        </div>
+                    </div>
+                </div>
+                <div class="attachment-actions">
+                    <button class="btn btn-sm btn-outline-primary" 
+                            onclick="previewAttachment('${conversationUuid}', ${messageIndex}, ${attachmentIndex})"
+                            title="Preview">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success ms-1" 
+                            onclick="downloadAttachment('${conversationUuid}', ${messageIndex}, ${attachmentIndex})"
+                            title="Download">
+                        <i class="bi bi-download"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// Generate assistant artifacts HTML (content generated by AI)
+function generateAssistantArtifactsHTML(contentBlocks, conversationUuid, messageIndex) {
+    if (!contentBlocks || contentBlocks.length === 0) return '';
+    
+    // Filter out empty or invalid content blocks
+    const validContentBlocks = contentBlocks.filter(block => 
+        block && (block.text || block.thinking) && block.type
+    );
+    
+    if (validContentBlocks.length === 0) return '';
+    
+    let html = '<div class="artifacts-section mt-3">';
+    html += '<div class="artifacts-header">';
+    html += `<i class="bi bi-file-earmark-code"></i> <strong>${validContentBlocks.length} Artifact(s)</strong>`;
+    html += '</div>';
+    
+    validContentBlocks.forEach((contentBlock, contentIndex) => {
+        const artifactType = contentBlock.type || 'unknown';
+        const artifactIcon = getArtifactIcon(artifactType);
+        const artifactTitle = getArtifactTitle(contentBlock, contentIndex);
+        const contentLength = getContentLength(contentBlock);
+        const contentSize = formatFileSize(contentLength);
+        
+        html += `
+            <div class="artifact-item" data-content-index="${contentIndex}" data-artifact-type="${artifactType}">
+                <div class="artifact-info">
+                    <div class="artifact-icon">
+                        <i class="bi ${artifactIcon}"></i>
+                    </div>
+                    <div class="artifact-details">
+                        <div class="artifact-title">${artifactTitle}</div>
+                        <div class="artifact-meta text-muted">
+                            ${artifactType.toUpperCase()} ${contentSize ? `• ${contentSize}` : ''} • AI Generated
+                        </div>
+                    </div>
+                </div>
+                <div class="artifact-actions">
+                    <button class="btn btn-sm btn-outline-primary" 
+                            onclick="previewArtifact('${conversationUuid}', ${messageIndex}, ${contentIndex})"
+                            title="Preview">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success ms-1" 
+                            onclick="downloadArtifact('${conversationUuid}', ${messageIndex}, ${contentIndex})"
+                            title="Download">
+                        <i class="bi bi-download"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// Get file type from filename
+function getFileType(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    const imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+    const docTypes = ['pdf', 'doc', 'docx', 'txt', 'rtf'];
+    const codeTypes = ['js', 'py', 'html', 'css', 'json', 'xml', 'csv'];
+    const archiveTypes = ['zip', 'rar', '7z', 'tar', 'gz'];
+    
+    if (imageTypes.includes(ext)) return 'image';
+    if (docTypes.includes(ext)) return 'document';
+    if (codeTypes.includes(ext)) return 'code';
+    if (archiveTypes.includes(ext)) return 'archive';
+    return 'file';
+}
+
+// Get Bootstrap icon for file type
+function getFileIcon(fileType) {
+    const icons = {
+        'image': 'bi-image',
+        'document': 'bi-file-text',
+        'code': 'bi-file-code',
+        'archive': 'bi-file-zip',
+        'file': 'bi-file-earmark'
+    };
+    return icons[fileType] || 'bi-file-earmark';
+}
+
+// Get Bootstrap icon for artifact type
+function getArtifactIcon(artifactType) {
+    const icons = {
+        'text': 'bi-chat-text',
+        'thinking': 'bi-lightbulb',
+        'code': 'bi-code-square',
+        'document': 'bi-file-earmark-text',
+        'unknown': 'bi-file-earmark-code'
+    };
+    return icons[artifactType] || 'bi-file-earmark-code';
+}
+
+// Get artifact title from content block
+function getArtifactTitle(contentBlock, contentIndex) {
+    if (contentBlock.summaries && contentBlock.summaries.length > 0) {
+        return contentBlock.summaries[contentBlock.summaries.length - 1].summary || `Artifact ${contentIndex + 1}`;
+    }
+    
+    if (contentBlock.type === 'thinking') {
+        return `Assistant Thinking ${contentIndex + 1}`;
+    } else if (contentBlock.type === 'text') {
+        return `Assistant Response ${contentIndex + 1}`;
+    }
+    
+    return `AI Artifact ${contentIndex + 1}`;
+}
+
+// Get content length for artifact
+function getContentLength(contentBlock) {
+    const text = contentBlock.text || contentBlock.thinking || contentBlock.data || '';
+    return new TextEncoder().encode(text).length;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+// Format file size
+function formatFileSize(bytes) {
+    if (bytes === 0) return '';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Preview attachment
+async function previewAttachment(conversationUuid, messageIndex, attachmentIndex) {
+    try {
+        const response = await fetch(`/api/attachment/${conversationUuid}/${messageIndex}/${attachmentIndex}`);
+        const attachment = await response.json();
+        
+        if (attachment.error) {
+            alert('Error loading attachment: ' + attachment.error);
+            return;
+        }
+        
+        showAttachmentPreview(attachment, conversationUuid, messageIndex, attachmentIndex);
+    } catch (error) {
+        console.error('Error previewing attachment:', error);
+        alert('Error previewing attachment');
+    }
+}
+
+// Download attachment
+async function downloadAttachment(conversationUuid, messageIndex, attachmentIndex) {
+    try {
+        // Directly use the download endpoint
+        const downloadUrl = `/api/attachment/${conversationUuid}/${messageIndex}/${attachmentIndex}/download`;
+        
+        // Create and trigger download
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = ''; // Let the server set the filename
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error('Error downloading attachment:', error);
+        alert('Error downloading attachment');
+    }
+}
+
+// Preview artifact (AI-generated content)
+async function previewArtifact(conversationUuid, messageIndex, contentIndex) {
+    try {
+        const response = await fetch(`/api/artifact/${conversationUuid}/${messageIndex}/${contentIndex}`);
+        const artifact = await response.json();
+        
+        if (artifact.error) {
+            alert('Error loading artifact: ' + artifact.error);
+            return;
+        }
+        
+        showArtifactPreview(artifact);
+    } catch (error) {
+        console.error('Error previewing artifact:', error);
+        alert('Error previewing artifact');
+    }
+}
+
+// Download artifact
+async function downloadArtifact(conversationUuid, messageIndex, contentIndex) {
+    try {
+        const response = await fetch(`/api/artifact/${conversationUuid}/${messageIndex}/${contentIndex}`);
+        const artifact = await response.json();
+        
+        if (artifact.error) {
+            alert('Error loading artifact: ' + artifact.error);
+            return;
+        }
+        
+        // Create and trigger download
+        const blob = new Blob([artifact.data], { type: artifact.content_type });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = artifact.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Error downloading artifact:', error);
+        alert('Error downloading artifact');
+    }
+}
+
+// Show attachment preview modal
+function showAttachmentPreview(attachment, conversationUuid, messageIndex, attachmentIndex) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.id = 'attachmentPreviewModal';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi ${getFileIcon(getFileType(attachment.filename))} me-2"></i>
+                        ${attachment.filename}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="attachment-preview">
+                        ${generatePreviewContent(attachment)}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="/api/attachment/${conversationUuid}/${messageIndex}/${attachmentIndex}/download" class="btn btn-primary" download="${attachment.filename || 'attachment'}">
+                        <i class="bi bi-download me-2"></i>Download
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+    
+    bootstrapModal.show();
+}
+
+// Generate preview content based on file type
+function generatePreviewContent(attachment) {
+    // Use file_type from API response or fallback to filename detection
+    const apiFileType = attachment.file_type || '';
+    const detectedFileType = getFileType(attachment.filename || 'file.txt');
+    
+    // Determine if it's a text-based file that can be previewed
+    const isTextFile = apiFileType === 'txt' || 
+                      apiFileType === 'md' || 
+                      apiFileType === 'json' || 
+                      apiFileType === 'xml' || 
+                      apiFileType === 'csv' ||
+                      detectedFileType === 'code' || 
+                      detectedFileType === 'document';
+    
+    // For text-based files, show content directly (not base64 encoded)
+    if (isTextFile && attachment.data) {
+        return `
+            <div class="attachment-content-preview">
+                <div class="mb-3">
+                    <strong>Content Preview:</strong>
+                    <span class="text-muted">(showing first 2000 characters)</span>
+                </div>
+                <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${escapeHtml(attachment.data)}</pre>
+            </div>
+        `;
+    }
+    
+    // For images (if we ever get base64 data)
+    const isImage = apiFileType === 'jpg' || apiFileType === 'png' || apiFileType === 'gif' || 
+                   detectedFileType === 'image';
+    if (isImage && attachment.data && attachment.data.startsWith('data:')) {
+        return `<img src="${attachment.data}" class="img-fluid" alt="${attachment.filename}">`;
+    }
+    
+    // Default fallback view
+    return `
+        <div class="text-center p-4">
+            <i class="bi ${getFileIcon(detectedFileType)} display-1 text-muted"></i>
+            <h5 class="mt-3">${attachment.filename || 'Unknown File'}</h5>
+            <p class="text-muted">
+                ${attachment.content_type || 'Unknown type'} • ${formatFileSize(attachment.size || 0)}
+            </p>
+            <div class="text-muted">
+                ${attachment.data ? 'Content preview available - download to view full content' : 'Preview not available for this file type'}
+            </div>
+            ${attachment.data && attachment.data.length > 0 ? `
+                <div class="mt-3">
+                    <small class="text-muted">Content length: ${attachment.data.length} characters</small>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// Show artifact preview modal
+function showArtifactPreview(artifact) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.id = 'artifactPreviewModal';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi ${getArtifactIcon(artifact.artifact_type)} me-2"></i>
+                        ${artifact.filename}
+                        <span class="badge bg-success ms-2">AI Generated</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="artifact-preview">
+                        ${generateArtifactPreviewContent(artifact)}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="downloadArtifactFromModal('${encodeURIComponent(artifact.data)}', '${artifact.filename}', '${artifact.content_type}')">
+                        <i class="bi bi-download"></i> Download
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+}
+
+// Generate artifact preview content
+function generateArtifactPreviewContent(artifact) {
+    let preview = `
+        <div class="artifact-metadata mb-3">
+            <strong>Type:</strong> ${artifact.artifact_type.toUpperCase()}<br>
+            <strong>Size:</strong> ${formatFileSize(artifact.size)}<br>
+            ${artifact.start_timestamp ? `<strong>Generated:</strong> ${new Date(artifact.start_timestamp).toLocaleString()}<br>` : ''}
+        </div>
+    `;
+    
+    if (artifact.summaries && artifact.summaries.length > 0) {
+        preview += `
+            <div class="artifact-summaries mb-3">
+                <strong>AI Summary:</strong>
+                <ul class="list-unstyled ms-3">
+                    ${artifact.summaries.map(s => `<li><i class="bi bi-arrow-right me-2"></i>${escapeHtml(s.summary)}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    preview += `
+        <div class="artifact-content">
+            <strong>Content:</strong>
+            <pre class="bg-light p-3 rounded mt-2" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${escapeHtml(artifact.data.substring(0, 2000))}${artifact.data.length > 2000 ? '\n... [truncated]' : ''}</pre>
+        </div>
+    `;
+    
+    return preview;
+}
+
+// Download artifact from modal
+function downloadArtifactFromModal(encodedData, filename, contentType) {
+    const data = decodeURIComponent(encodedData);
+    const blob = new Blob([data], { type: contentType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+}
+
+// Copy message to clipboard
+function copyMessage(messageIndex) {
+    const messageElement = document.getElementById(`message-${messageIndex}`);
+    const messageText = messageElement.innerText || messageElement.textContent;
+    
+    navigator.clipboard.writeText(messageText).then(function() {
+        // Show temporary success feedback
+        const button = event.target.closest('.copy-btn');
+        const originalContent = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check"></i>';
+        button.classList.add('btn-success');
+        button.classList.remove('btn-outline-secondary');
+        
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-secondary');
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Failed to copy message: ', err);
+        alert('Failed to copy message to clipboard');
+    });
+}
+
+// Display results summary
+function displayResultsSummary(pagination, sortInfo) {
+    const summaryDiv = document.getElementById('resultsSummary');
+    const summaryText = document.getElementById('summaryText');
+    const sortInfoSpan = document.getElementById('sortInfo');
+    
+    if (pagination.total_count > 0) {
+        const start = (pagination.page - 1) * pagination.per_page + 1;
+        const end = Math.min(pagination.page * pagination.per_page, pagination.total_count);
+        
+        summaryText.textContent = `Showing ${start}-${end} of ${pagination.total_count} conversations`;
+        
+        // Display sort information
+        const sortLabels = {
+            'created_at': 'Date Created',
+            'updated_at': 'Last Updated', 
+            'name': 'Name',
+            'message_count': 'Messages Count',
+            'attachment_count': 'Attachments'
+        };
+        
+        const orderLabel = sortInfo.sort_order === 'desc' ? 'Descending' : 'Ascending';
+        sortInfoSpan.textContent = `Sorted by ${sortLabels[sortInfo.sort_by]} (${orderLabel})`;
+        
+        summaryDiv.style.display = 'block';
+    } else {
+        summaryDiv.style.display = 'none';
+    }
+}
+
+// Display pagination controls
+function displayPagination(pagination) {
+    const container = document.getElementById('paginationControls');
+    
+    if (pagination.total_pages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = `
+        <nav aria-label="Conversations pagination">
+            <ul class="pagination justify-content-center">
+    `;
+    
+    // Previous button
+    if (pagination.has_prev) {
+        html += `<li class="page-item">
+            <a class="page-link" href="#" onclick="searchConversations(${pagination.page - 1}); return false;">Previous</a>
+        </li>`;
+    } else {
+        html += `<li class="page-item disabled">
+            <span class="page-link">Previous</span>
+        </li>`;
+    }
+    
+    // Page numbers
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+    
+    if (startPage > 1) {
+        html += `<li class="page-item">
+            <a class="page-link" href="#" onclick="searchConversations(1); return false;">1</a>
+        </li>`;
+        if (startPage > 2) {
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        if (i === pagination.page) {
+            html += `<li class="page-item active">
+                <span class="page-link">${i}</span>
+            </li>`;
+        } else {
+            html += `<li class="page-item">
+                <a class="page-link" href="#" onclick="searchConversations(${i}); return false;">${i}</a>
+            </li>`;
+        }
+    }
+    
+    if (endPage < pagination.total_pages) {
+        if (endPage < pagination.total_pages - 1) {
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        html += `<li class="page-item">
+            <a class="page-link" href="#" onclick="searchConversations(${pagination.total_pages}); return false;">${pagination.total_pages}</a>
+        </li>`;
+    }
+    
+    // Next button
+    if (pagination.has_next) {
+        html += `<li class="page-item">
+            <a class="page-link" href="#" onclick="searchConversations(${pagination.page + 1}); return false;">Next</a>
+        </li>`;
+    } else {
+        html += `<li class="page-item disabled">
+            <span class="page-link">Next</span>
+        </li>`;
+    }
+    
+    html += `
+            </ul>
+        </nav>
+        <div class="text-center text-muted mt-2">
+            Showing ${(pagination.page - 1) * pagination.per_page + 1} to ${Math.min(pagination.page * pagination.per_page, pagination.total_count)} of ${pagination.total_count} conversations
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// Initialize
+loadAccounts();
+searchConversations();
+</script>
+{% endblock %}

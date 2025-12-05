@@ -1,0 +1,110 @@
+<!-- templates/upload.html -->
+{% extends "base.html" %}
+{% block title %}Import Data - Anthropic Data Manager{% endblock %}
+{% block content %}
+<h2 class="mb-4">Import Data</h2>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" enctype="multipart/form-data" id="uploadForm">
+            <div class="upload-zone" id="dropZone">
+                <i class="bi bi-cloud-upload" style="font-size: 48px; color: #667eea;"></i>
+                <h4 class="mt-3">Drag & Drop your Anthropic export ZIP file here</h4>
+                <p class="text-muted">or click to browse</p>
+                <input type="file" name="file" id="fileInput" accept=".zip" class="d-none" required>
+                <button type="button" class="btn btn-primary mt-3" onclick="document.getElementById('fileInput').click()">
+                    <i class="bi bi-folder-open"></i> Choose File
+                </button>
+            </div>
+            
+            <div class="mt-4">
+                <label for="account_name" class="form-label">Account Name (to identify this import)</label>
+                <input type="text" class="form-control" name="account_name" id="account_name" 
+                       placeholder="e.g., Personal, Work, Client-XYZ" required>
+            </div>
+            
+            <div class="mt-3" id="fileInfo" style="display: none;">
+                <div class="alert alert-info">
+                    <i class="bi bi-file-zip"></i> Selected: <span id="fileName"></span>
+                    <br>Size: <span id="fileSize"></span>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-success btn-lg mt-4" id="uploadBtn" style="display: none;">
+                <i class="bi bi-upload"></i> Import Data
+            </button>
+        </form>
+        
+        <div class="progress mt-3" id="progressBar" style="display: none;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Instructions -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5><i class="bi bi-info-circle"></i> How to Export Your Anthropic Data</h5>
+    </div>
+    <div class="card-body">
+        <ol>
+            <li>Log in to your Anthropic account at <a href="https://claude.ai" target="_blank">claude.ai</a></li>
+            <li>Go to Settings → Account</li>
+            <li>Click on "Export Data"</li>
+            <li>Download the ZIP file</li>
+            <li>Upload it here using the form above</li>
+        </ol>
+        <div class="alert alert-warning mt-3">
+            <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> 
+            Don't worry about duplicates! The system automatically detects and prevents duplicate data 
+            based on unique IDs. You can safely re-import the same data multiple times.
+        </div>
+    </div>
+</div>
+
+<script>
+// File input handling
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        document.getElementById('fileName').textContent = file.name;
+        document.getElementById('fileSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+        document.getElementById('fileInfo').style.display = 'block';
+        document.getElementById('uploadBtn').style.display = 'block';
+    }
+});
+
+// Drag and drop
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.background = '#f0f0f0';
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dropZone.style.background = '';
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.background = '';
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0 && files[0].name.endsWith('.zip')) {
+        document.getElementById('fileInput').files = files;
+        const event = new Event('change', { bubbles: true });
+        document.getElementById('fileInput').dispatchEvent(event);
+    }
+});
+
+// Upload progress
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    document.getElementById('progressBar').style.display = 'block';
+    document.getElementById('uploadBtn').disabled = true;
+    // Progress animation would be handled by actual upload
+});
+</script>
+{% endblock %}
+

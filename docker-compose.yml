@@ -1,0 +1,60 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: anthropic_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: securepassword123
+      MONGO_INITDB_DATABASE: anthropic_data
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    networks:
+      - anthropic_network
+
+  app:
+    build: .
+    container_name: anthropic_app
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://admin:securepassword123@mongodb:27017/
+      FLASK_ENV: production
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-here}   
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./src:/app
+      - ./src/uploads:/app/uploads
+      - ./src/templates:/app/templates
+    depends_on:
+      - mongodb
+    networks:
+      - anthropic_network
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: anthropic_mongo_express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: securepassword123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:securepassword123@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: adminpass
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+    networks:
+      - anthropic_network
+
+volumes:
+  mongo_data:
+  mongo_config:
+
+networks:
+  anthropic_network:
+    driver: bridge

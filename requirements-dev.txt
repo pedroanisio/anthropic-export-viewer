@@ -1,0 +1,26 @@
+# Development dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Include base requirements
+-r src/requirements.txt
+
+# Testing (ADR-003, ADR-120)
+pytest>=8.0.0,<9.0.0
+pytest-cov>=4.1.0,<5.0.0
+pytest-mock>=3.12.0,<4.0.0
+mongomock>=4.1.0,<5.0.0
+
+# Linting and Formatting (ADR-007)
+ruff>=0.1.0,<1.0.0
+
+# Type Checking (ADR-002)
+mypy>=1.8.0,<2.0.0
+types-Flask>=1.1.0
+
+# Pre-commit hooks (ADR-008)
+pre-commit>=3.6.0,<4.0.0
+
+# Security scanning (ADR-131)
+bandit>=1.7.0,<2.0.0
+safety>=2.3.0,<3.0.0
+
