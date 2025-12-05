@@ -64,7 +64,7 @@
         <div class="project-card card h-100" onclick="viewProjectDetails('{{ project.uuid }}')">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <div class="project-title">
-                    <h6 class="mb-0">{{ project.name or 'Unnamed Project' }}</h6>
+                    <h6 class="mb-0 card-title">{{ project.name or 'Unnamed Project' }}</h6>
                 </div>
                 <div class="project-badges">
                     {% if project.is_starter_project %}
@@ -80,21 +80,23 @@
             
             <div class="card-body">
                 <div class="project-description mb-3">
-                    <p class="text-muted mb-2">
-                        {{ (project.description[:120] + '...') if project.description and project.description|length > 120 else (project.description or 'No description available') }}
+                    {% if project.description %}
+                    <p class="text-muted mb-2 line-clamp-2">
+                        {{ project.description }}
                     </p>
+                    {% endif %}
                 </div>
                 
                 <div class="project-meta">
                     <div class="row">
                         <div class="col-6">
-                            <small class="text-muted">
+                            <small class="date-display" title="{{ project.created_at }}">
                                 <i class="bi bi-calendar"></i> 
-                                {{ project.created_at[:10] if project.created_at else 'N/A' }}
+                                {{ project.created_at|humandate if project.created_at else 'N/A' }}
                             </small>
                         </div>
                         <div class="col-6 text-end">
-                            <small class="text-muted">
+                            <small class="text-muted truncate" style="max-width: 100px; display: inline-block;">
                                 <i class="bi bi-person"></i> 
                                 {{ project.creator or 'Unknown' }}
                             </small>

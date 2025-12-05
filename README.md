@@ -28,8 +28,8 @@ A complete application for managing Anthropic data exports from multiple account
 
 ```bash
 # Clone the repository
-git clone https://github.com/pedroanisio/anthropic-data-viewer.git
-cd anthropic-data-viewer
+git clone https://github.com/pedroanisio/anthropic-export-viewer.git
+cd anthropic-export-viewer
 
 # Copy environment template
 cp env.example .env

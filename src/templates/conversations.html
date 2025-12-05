@@ -41,23 +41,31 @@
         <!-- Quick Sort Buttons -->
         <div class="row">
             <div class="col-12">
-                <div class="btn-group btn-group-sm" role="group" aria-label="Quick sort">
-                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('created_at', 'desc')">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Quick sort" id="quickSortButtons">
+                    <button type="button" class="btn btn-outline-secondary active" data-sort="created_at" data-order="desc" onclick="quickSort('created_at', 'desc', this)">
                         <i class="bi bi-clock"></i> Recent
                     </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('name', 'asc')">
+                    <button type="button" class="btn btn-outline-secondary" data-sort="name" data-order="asc" onclick="quickSort('name', 'asc', this)">
                         <i class="bi bi-sort-alpha-down"></i> A-Z
                     </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('message_count', 'desc')">
+                    <button type="button" class="btn btn-outline-secondary" data-sort="message_count" data-order="desc" onclick="quickSort('message_count', 'desc', this)">
                         <i class="bi bi-chat-dots"></i> Most Active
                     </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="quickSort('attachment_count', 'desc')">
+                    <button type="button" class="btn btn-outline-secondary" data-sort="attachment_count" data-order="desc" onclick="quickSort('attachment_count', 'desc', this)">
                         <i class="bi bi-file-earmark-code"></i> Most Artifacts
                     </button>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+<!-- Engagement Legend -->
+<div class="engagement-legend mb-3">
+    <small class="text-muted me-2">Activity level:</small>
+    <span class="legend-item"><span class="legend-dot legend-high"></span> High (20+ msgs)</span>
+    <span class="legend-item"><span class="legend-dot legend-medium"></span> Medium (10-20)</span>
+    <span class="legend-item"><span class="legend-dot legend-low"></span> Low (&lt;10)</span>
 </div>
 
 <!-- Results Summary -->
@@ -78,7 +86,7 @@
 <div class="modal fade" id="conversationModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 90vw;">
         <div class="modal-content">
-            <div class="modal-header bg-light">
+            <div class="modal-header modal-header-themed">
                 <h5 class="modal-title" id="conversationTitle">
                     <i class="bi bi-chat-dots me-2"></i>Conversation
                 </h5>
@@ -92,7 +100,7 @@
             <div class="modal-body p-4" id="conversationContent" style="min-height: 60vh;">
                 <!-- Messages will be loaded here -->
             </div>
-            <div class="modal-footer bg-light">
+            <div class="modal-footer modal-footer-themed">
                 <small class="text-muted me-auto">Use the Export button to save this conversation as JSON</small>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x-circle me-1"></i>Close
@@ -151,7 +159,7 @@ async function searchConversations(page = 1) {
 }
 
 // Quick sort function
-function quickSort(sortBy, sortOrder) {
+function quickSort(sortBy, sortOrder, buttonEl) {
     document.getElementById('sortBy').value = sortBy;
     document.getElementById('sortOrder').value = sortOrder;
     
@@ -175,12 +183,54 @@ function quickSort(sortBy, sortOrder) {
     }
     
     // Update button active state
-    document.querySelectorAll('.btn-group .btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
+    const buttonGroup = document.getElementById('quickSortButtons');
+    if (buttonGroup) {
+        buttonGroup.querySelectorAll('.btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+    }
+    if (buttonEl) {
+        buttonEl.classList.add('active');
+    }
     
     searchConversations(1);
+}
+
+// Format date to human-readable format (e.g., "Dec 2, 2025")
+function formatHumanDate(dateStr) {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Format date to relative format (e.g., "2 days ago")
+function formatRelativeDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        if (diffHours === 0) {
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+            return diffMins <= 1 ? 'just now' : `${diffMins} mins ago`;
+        }
+        return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+    }
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) {
+        const weeks = Math.floor(diffDays / 7);
+        return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+    }
+    if (diffDays < 365) {
+        const months = Math.floor(diffDays / 30);
+        return months === 1 ? '1 month ago' : `${months} months ago`;
+    }
+    const years = Math.floor(diffDays / 365);
+    return years === 1 ? '1 year ago' : `${years} years ago`;
 }
 
 // Display conversation list
@@ -205,15 +255,17 @@ function displayConversations(conversations) {
         const engagementLevel = messageCount > 20 ? 'high' : messageCount > 10 ? 'medium' : 'low';
         const engagementColor = engagementLevel === 'high' ? 'success' : engagementLevel === 'medium' ? 'warning' : 'secondary';
         
-        // Format dates
-        const createdDate = new Date(conv.created_at).toLocaleDateString();
-        const updatedDate = conv.updated_at ? new Date(conv.updated_at).toLocaleDateString() : createdDate;
+        // Format dates - human readable
+        const createdHuman = formatHumanDate(conv.created_at);
+        const createdRelative = formatRelativeDate(conv.created_at);
+        const updatedHuman = conv.updated_at ? formatHumanDate(conv.updated_at) : createdHuman;
+        const showUpdated = conv.updated_at && updatedHuman !== createdHuman;
         
         html += `
             <div class="conversation-item ${hasAttachments ? 'has-attachments' : ''} engagement-${engagementLevel}" onclick="viewConversation('${conv.uuid}')">
                 <div class="conversation-header d-flex justify-content-between align-items-start">
                     <div class="conversation-title-section d-flex align-items-center gap-2 flex-grow-1">
-                        <h6 class="mb-0 conversation-title">${conv.name || 'Unnamed Conversation'}</h6>
+                        <h6 class="mb-0 conversation-title card-title">${conv.name || 'Unnamed Conversation'}</h6>
                         ${hasAttachments ? `<i class="bi bi-file-earmark-code text-warning attachment-indicator" title="${attachmentCount} artifact(s)"></i>` : ''}
                         <span class="badge bg-${engagementColor} engagement-badge" title="Engagement Level">${messageCount}</span>
                     </div>
@@ -223,9 +275,10 @@ function displayConversations(conversations) {
                 <div class="conversation-stats mt-2">
                     <div class="row">
                         <div class="col-md-8">
-                            <small class="text-muted">
-                                <i class="bi bi-calendar3"></i> Created ${createdDate}
-                                ${updatedDate !== createdDate ? `| <i class="bi bi-arrow-clockwise"></i> Updated ${updatedDate}` : ''}
+                            <small class="date-display" title="${conv.created_at}">
+                                <i class="bi bi-calendar3"></i> ${createdHuman}
+                                <span class="date-relative ms-1">(${createdRelative})</span>
+                                ${showUpdated ? `<span class="ms-2"><i class="bi bi-arrow-clockwise"></i> ${updatedHuman}</span>` : ''}
                             </small>
                         </div>
                         <div class="col-md-4 text-end">
@@ -242,7 +295,7 @@ function displayConversations(conversations) {
                                     <i class="bi bi-robot"></i> ${assistantMessages}
                                 </span>` : ''}
                                 ${hasAttachments ? `
-                                <span class="metric-item" title="Artifacts">
+                                <span class="metric-item badge-artifacts" title="Artifacts">
                                     <i class="bi bi-file-earmark-code"></i> ${attachmentCount}
                                 </span>` : ''}
                             </div>
@@ -681,7 +734,7 @@ function generatePreviewContent(attachment) {
                     <strong>Content Preview:</strong>
                     <span class="text-muted">(showing first 2000 characters)</span>
                 </div>
-                <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${escapeHtml(attachment.data)}</pre>
+                <pre class="code-preview-block">${escapeHtml(attachment.data)}</pre>
             </div>
         `;
     }
@@ -777,7 +830,7 @@ function generateArtifactPreviewContent(artifact) {
     preview += `
         <div class="artifact-content">
             <strong>Content:</strong>
-            <pre class="bg-light p-3 rounded mt-2" style="max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${escapeHtml(artifact.data.substring(0, 2000))}${artifact.data.length > 2000 ? '\n... [truncated]' : ''}</pre>
+            <pre class="code-preview-block mt-2">${escapeHtml(artifact.data.substring(0, 2000))}${artifact.data.length > 2000 ? '\n... [truncated]' : ''}</pre>
         </div>
     `;
     

@@ -2,36 +2,39 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - Anthropic Data Manager{% endblock %}
 {% block content %}
-<h2 class="mb-4">Dashboard</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Dashboard</h2>
+    <span class="text-muted" style="font-size: 0.875rem;"><i class="bi bi-clock me-1"></i> Last updated: {{ now }}</span>
+</div>
 
 <!-- Statistics Cards -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card stat-card bg-primary text-white">
+<div class="row mb-4 g-3">
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card bg-primary text-white h-100">
             <div class="card-body">
                 <h5 class="card-title"><i class="bi bi-chat-dots"></i> Conversations</h5>
                 <h2>{{ stats.conversations }}</h2>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card stat-card bg-success text-white">
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card bg-success text-white h-100">
             <div class="card-body">
                 <h5 class="card-title"><i class="bi bi-people"></i> Users</h5>
                 <h2>{{ stats.users }}</h2>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card stat-card bg-warning text-white">
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card bg-warning text-white h-100">
             <div class="card-body">
                 <h5 class="card-title"><i class="bi bi-folder"></i> Projects</h5>
                 <h2>{{ stats.projects }}</h2>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card stat-card bg-info text-white">
+    <div class="col-md-3 col-sm-6">
+        <div class="card stat-card bg-info text-white h-100">
             <div class="card-body">
                 <h5 class="card-title"><i class="bi bi-arrow-down-circle"></i> Imports</h5>
                 <h2>{{ stats.imports }}</h2>

@@ -2,88 +2,233 @@
 {% extends "base.html" %}
 {% block title %}Export - Anthropic Data Manager{% endblock %}
 {% block content %}
-<h2 class="mb-4">Export Data</h2>
-
-<div class="row">
-    <div class="col-md-12">
-        <div class="alert alert-info">
-            <i class="bi bi-info-circle"></i> Export your Anthropic data in various formats for backup or analysis.
-        </div>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Export Data</h2>
 </div>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card">
+<div class="alert alert-info d-flex align-items-center mb-4">
+    <i class="bi bi-info-circle me-2"></i>
+    <span>Export your Anthropic data in various formats for backup, analysis, or migration.</span>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Export Conversations</h5>
+                <h5><i class="bi bi-chat-dots"></i> Export Conversations</h5>
             </div>
             <div class="card-body">
-                <p>Export conversation data in JSON or CSV format.</p>
+                <p class="text-muted mb-4">Download your conversations with full message history, attachments metadata, and timestamps.</p>
+                
                 <div class="mb-3">
-                    <label class="form-label">Account Filter</label>
+                    <label class="form-label">Account</label>
                     <select class="form-select" id="exportAccountFilter">
                         <option value="">All Accounts</option>
                     </select>
                 </div>
+                
                 <div class="mb-3">
                     <label class="form-label">Date Range</label>
-                    <div class="row">
+                    <div class="row g-2">
                         <div class="col">
-                            <input type="date" class="form-control" id="exportDateFrom">
+                            <input type="date" class="form-control" id="exportDateFrom" placeholder="From">
+                        </div>
+                        <div class="col-auto d-flex align-items-center text-muted">
+                            <i class="bi bi-arrow-right"></i>
                         </div>
                         <div class="col">
-                            <input type="date" class="form-control" id="exportDateTo">
+                            <input type="date" class="form-control" id="exportDateTo" placeholder="To">
                         </div>
                     </div>
                 </div>
-                <div class="mb-3">
+                
+                <div class="mb-4">
                     <label class="form-label">Format</label>
-                    <select class="form-select" id="exportFormat">
-                        <option value="json">JSON</option>
-                        <option value="csv">CSV</option>
-                    </select>
+                    <div class="format-options">
+                        <label class="format-option">
+                            <input type="radio" name="exportFormat" value="json" checked>
+                            <div class="format-card">
+                                <i class="bi bi-braces"></i>
+                                <span>JSON</span>
+                                <small>Complete data structure</small>
+                            </div>
+                        </label>
+                        <label class="format-option">
+                            <input type="radio" name="exportFormat" value="csv">
+                            <div class="format-card">
+                                <i class="bi bi-file-earmark-spreadsheet"></i>
+                                <span>CSV</span>
+                                <small>Spreadsheet compatible</small>
+                            </div>
+                        </label>
+                    </div>
                 </div>
-                <button class="btn btn-primary" onclick="exportData('conversations')">
-                    <i class="bi bi-download"></i> Export Conversations
+                
+                <button class="btn btn-primary w-100" onclick="exportData('conversations')">
+                    <i class="bi bi-download me-1"></i> Export Conversations
                 </button>
             </div>
         </div>
     </div>
     
-    <div class="col-md-6">
-        <div class="card">
+    <div class="col-lg-6">
+        <div class="card h-100">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-folder"></i> Export Projects</h5>
+                <h5><i class="bi bi-folder"></i> Export Projects</h5>
             </div>
-            <div class="card-body">
-                <p>Export project data and metadata.</p>
-                <button class="btn btn-primary" onclick="exportData('projects')">
-                    <i class="bi bi-download"></i> Export Projects
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted mb-4">Download all your project configurations, documentation, and prompt templates.</p>
+                
+                <div class="export-info mb-4">
+                    <div class="export-info-item">
+                        <i class="bi bi-file-text"></i>
+                        <span>Project documentation</span>
+                    </div>
+                    <div class="export-info-item">
+                        <i class="bi bi-code-square"></i>
+                        <span>Prompt templates</span>
+                    </div>
+                    <div class="export-info-item">
+                        <i class="bi bi-gear"></i>
+                        <span>Project metadata</span>
+                    </div>
+                </div>
+                
+                <div class="mt-auto">
+                    <button class="btn btn-primary w-100" onclick="exportData('projects')">
+                        <i class="bi bi-download me-1"></i> Export Projects
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-database"></i> Full Database Export</h5>
+        <span class="badge bg-warning">Large File</span>
+    </div>
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-lg-8">
+                <p class="text-muted mb-3">Export your complete dataset including all conversations, projects, users, and metadata in a single archive.</p>
+                
+                <div class="d-flex flex-wrap gap-4 mb-0">
+                    <div class="d-flex align-items-center text-muted">
+                        <i class="bi bi-chat-dots me-2"></i>
+                        <span>Conversations</span>
+                    </div>
+                    <div class="d-flex align-items-center text-muted">
+                        <i class="bi bi-folder me-2"></i>
+                        <span>Projects</span>
+                    </div>
+                    <div class="d-flex align-items-center text-muted">
+                        <i class="bi bi-people me-2"></i>
+                        <span>Users</span>
+                    </div>
+                    <div class="d-flex align-items-center text-muted">
+                        <i class="bi bi-tag me-2"></i>
+                        <span>Metadata</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 mt-3 mt-lg-0">
+                <button class="btn btn-warning w-100" onclick="exportData('full')">
+                    <i class="bi bi-download me-1"></i> Export All Data
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-database"></i> Full Database Export</h5>
-            </div>
-            <div class="card-body">
-                <p>Export all data including conversations, projects, users, and metadata.</p>
-                <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle"></i> This may be a large download depending on your data size.
-                </div>
-                <button class="btn btn-warning" onclick="exportData('full')">
-                    <i class="bi bi-download"></i> Export All Data
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+<style>
+/* Format options styling */
+.format-options {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.format-option {
+    flex: 1;
+    cursor: pointer;
+}
+
+.format-option input {
+    display: none;
+}
+
+.format-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+    background: var(--color-slate-50);
+    border: 2px solid var(--color-slate-200);
+    border-radius: 0.5rem;
+    transition: var(--transition-fast);
+    text-align: center;
+}
+
+.format-card i {
+    font-size: 1.5rem;
+    color: var(--color-slate-400);
+    margin-bottom: 0.5rem;
+}
+
+.format-card span {
+    font-weight: 600;
+    color: var(--color-slate-700);
+    font-size: 0.875rem;
+}
+
+.format-card small {
+    font-size: 0.75rem;
+    color: var(--color-slate-400);
+    margin-top: 0.25rem;
+}
+
+.format-option input:checked + .format-card {
+    background: var(--color-primary-50);
+    border-color: var(--color-primary);
+}
+
+.format-option input:checked + .format-card i {
+    color: var(--color-primary);
+}
+
+.format-option input:checked + .format-card span {
+    color: var(--color-primary-dark);
+}
+
+.format-option:hover .format-card {
+    border-color: var(--color-primary-light);
+}
+
+/* Export info items */
+.export-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.export-info-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    background: var(--color-slate-50);
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--color-slate-600);
+}
+
+.export-info-item i {
+    color: var(--color-primary);
+    font-size: 1rem;
+}
+</style>
 
 <script>
 // Load accounts for filter
@@ -106,9 +251,9 @@ async function loadAccounts() {
 
 // Export data function
 async function exportData(type) {
-    const button = event.target;
+    const button = event.target.closest('button');
     const originalText = button.innerHTML;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Exporting...';
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Preparing...';
     button.disabled = true;
     
     try {
@@ -120,7 +265,7 @@ async function exportData(type) {
             const account = document.getElementById('exportAccountFilter').value;
             const dateFrom = document.getElementById('exportDateFrom').value;
             const dateTo = document.getElementById('exportDateTo').value;
-            const format = document.getElementById('exportFormat').value;
+            const format = document.querySelector('input[name="exportFormat"]:checked').value;
             
             if (account) params.append('account', account);
             if (dateFrom) params.append('date_from', dateFrom);
@@ -144,9 +289,20 @@ async function exportData(type) {
         link.click();
         document.body.removeChild(link);
         
+        // Brief success state
+        button.innerHTML = '<i class="bi bi-check me-1"></i> Download Started';
+        button.classList.remove('btn-primary', 'btn-warning');
+        button.classList.add('btn-success');
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.classList.remove('btn-success');
+            button.classList.add(type === 'full' ? 'btn-warning' : 'btn-primary');
+            button.disabled = false;
+        }, 2000);
+        
     } catch (error) {
         alert('Export failed: ' + error.message);
-    } finally {
         button.innerHTML = originalText;
         button.disabled = false;
     }

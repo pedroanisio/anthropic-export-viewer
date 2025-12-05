@@ -79,6 +79,67 @@ app.config["DB_NAME"] = settings.db_name
 
 CORS(app)
 
+
+# Jinja2 template filters for human-readable display
+@app.template_filter("humandate")
+def humandate_filter(value: datetime | str | None) -> str:
+    """Convert datetime to human-readable format (e.g., 'Dec 2, 2025')."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+    return value.strftime("%b %d, %Y")
+
+
+@app.template_filter("relativedate")
+def relativedate_filter(value: datetime | str | None) -> str:
+    """Convert datetime to relative format (e.g., '2 days ago')."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+
+    now = datetime.now(value.tzinfo) if value.tzinfo else datetime.now()
+    diff = now - value
+
+    if diff.days == 0:
+        if diff.seconds < 60:
+            return "just now"
+        if diff.seconds < 3600:
+            minutes = diff.seconds // 60
+            return f"{minutes} min{'s' if minutes != 1 else ''} ago"
+        hours = diff.seconds // 3600
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    if diff.days == 1:
+        return "yesterday"
+    if diff.days < 7:
+        return f"{diff.days} days ago"
+    if diff.days < 30:
+        weeks = diff.days // 7
+        return f"{weeks} week{'s' if weeks != 1 else ''} ago"
+    if diff.days < 365:
+        months = diff.days // 30
+        return f"{months} month{'s' if months != 1 else ''} ago"
+    years = diff.days // 365
+    return f"{years} year{'s' if years != 1 else ''} ago"
+
+
+@app.template_filter("truncate_uuid")
+def truncate_uuid_filter(value: str | None, length: int = 8) -> str:
+    """Truncate UUID to first N characters with ellipsis."""
+    if value is None:
+        return ""
+    if len(value) <= length:
+        return value
+    return f"{value[:length]}..."
+
+
 # Ensure upload directory exists
 Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
 
@@ -268,7 +329,8 @@ def index() -> str:
         "imports": db.import_history.count_documents({}),
         "recent_imports": list(db.import_history.find().sort("timestamp", -1).limit(5)),
     }
-    return render_template("index.html", stats=stats)
+    now = datetime.now().strftime("%b %d, %Y %H:%M")
+    return render_template("index.html", stats=stats, now=now)
 
 
 @app.route("/conversations")
