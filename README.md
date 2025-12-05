@@ -8,6 +8,7 @@ A complete application for managing Anthropic data exports from multiple account
 - 📦 **ZIP File Processing**: Direct upload and extraction of Anthropic export files
 - 🔍 **Search & Filter**: Search conversations by text, account, date, and more
 - 📊 **Visualization**: View conversations, messages, and statistics
+- 📈 **Stats & Trends**: Interactive charts showing usage patterns, volume over time, and activity heatmaps
 - 💾 **Export Options**: Export conversations and messages as JSON or CSV
 - 🚀 **Easy Deployment**: Docker-based setup with one command
 - ✅ **Type-Safe**: Full type annotations with strict mypy checking
@@ -86,6 +87,7 @@ anthropic-data-manager/
 │       ├── conversations.html
 │       ├── projects.html
 │       ├── analytics.html
+│       ├── stats.html
 │       └── export.html
 ├── tests/                  # Test suite
 │   ├── conftest.py         # Shared fixtures
@@ -188,6 +190,7 @@ pre-commit run --all-files
 | `/projects` | GET | Projects browser with filtering |
 | `/upload` | GET/POST | Upload and process ZIP files |
 | `/analytics` | GET | Analytics dashboard |
+| `/stats` | GET | Stats & trends with interactive charts |
 | `/export` | GET | Export tools page |
 | `/api/search/conversations` | POST | Search with pagination/sorting |
 | `/api/conversation/<uuid>` | GET | Get single conversation |
@@ -195,6 +198,8 @@ pre-commit run --all-files
 | `/api/export/conversation/<uuid>` | GET | Export conversation as JSON |
 | `/api/export/messages` | POST | Export selected messages |
 | `/api/stats` | GET | Get database statistics |
+| `/api/stats/timeseries` | GET | Time-series data for charts |
+| `/api/stats/heatmap` | GET | Heatmap data for activity calendar |
 | `/api/accounts` | GET | List all imported accounts |
 | `/api/attachment/...` | GET | Download user attachment |
 | `/api/artifact/...` | GET | Get AI-generated artifact |
@@ -220,9 +225,26 @@ pre-commit run --all-files
 
 - **Conversations**: Search, sort by date/messages/attachments
 - **Projects**: Filter by type (public/private/starter)
+- **Stats**: View usage trends, activity heatmaps, and volume charts
 - **View Details**: Click any item to see full content
 
-### 4. Export Data
+### 4. View Stats & Trends
+
+The Stats page (`/stats`) provides interactive visualizations:
+
+- **Summary Cards**: Total conversations, messages, daily averages, and trend indicators
+- **Conversations Over Time**: Line chart with day/week/month grouping
+- **Message Distribution**: Doughnut chart showing human vs assistant messages
+- **Messages Volume**: Stacked bar chart of message counts over time
+- **Account Distribution**: Breakdown by imported account
+- **Activity by Day of Week**: See which days are most active
+- **Activity by Hour**: Discover peak usage times
+- **Conversation Length Distribution**: Message count buckets
+- **Activity Heatmap**: GitHub-style calendar view of daily activity
+
+Use the time range selector (7 days, 30 days, 90 days, 1 year, All time) to adjust the view.
+
+### 5. Export Data
 
 - **Single Conversation**: Click Export JSON in conversation view
 - **Multiple Messages**: Select messages and export as JSON/CSV
@@ -355,7 +377,7 @@ LOG_FORMAT=json docker compose up
 - [ ] User authentication and multi-user support
 - [ ] Elasticsearch integration for advanced search
 - [ ] Scheduled automatic imports
-- [ ] Analytics dashboard with charts
+- [x] ~~Analytics dashboard with charts~~ ✅ Stats page with Chart.js visualizations
 - [ ] Conversation tagging and categorization
 - [ ] Batch operations UI
 - [ ] Real-time updates with WebSockets

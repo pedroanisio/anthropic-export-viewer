@@ -923,7 +923,22 @@ def search_conversations() -> Response:
     if filters.get("account"):
         mongo_query["_account_name"] = filters["account"]
 
-    if filters.get("date_from"):
+    if filters.get("date_from") and filters.get("date_to"):
+        # Filter by date range (inclusive)
+        date_from = filters["date_from"]
+        date_to = filters["date_to"]
+        # If same date, filter for that entire day
+        if date_from == date_to:
+            mongo_query["created_at"] = {
+                "$gte": f"{date_from}T00:00:00",
+                "$lt": f"{date_from}T23:59:59.999999",
+            }
+        else:
+            mongo_query["created_at"] = {
+                "$gte": f"{date_from}T00:00:00",
+                "$lte": f"{date_to}T23:59:59.999999",
+            }
+    elif filters.get("date_from"):
         mongo_query["created_at"] = {"$gte": filters["date_from"]}
 
     if filters.get("has_attachments"):
