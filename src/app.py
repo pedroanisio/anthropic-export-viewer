@@ -37,7 +37,7 @@ from pymongo import ASCENDING, TEXT, MongoClient
 from werkzeug.utils import secure_filename
 
 from config import get_settings
-from models import Attachment, ContentBlock, ContentBlockType
+from models import Attachment, ContentBlock, ContentBlockType, MessageRole
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -249,6 +249,10 @@ class DataProcessor:
         db.conversations.create_index([("account.uuid", ASCENDING)])
         db.conversations.create_index([("created_at", ASCENDING)])
         db.conversations.create_index([("name", TEXT)])
+        # `_account_name` backs account filtering (search), `distinct` (accounts/
+        # stats) and the account_distribution aggregation; index it so those hot
+        # paths don't collection-scan (drift-risk Finding #8).
+        db.conversations.create_index([("_account_name", ASCENDING)])
 
         # Users indexes
         db.users.create_index([("uuid", ASCENDING)], unique=True)
@@ -257,6 +261,7 @@ class DataProcessor:
         # Projects indexes
         db.projects.create_index([("uuid", ASCENDING)], unique=True)
         db.projects.create_index([("name", TEXT)])
+        db.projects.create_index([("_account_name", ASCENDING)])
 
         # Import history indexes
         db.import_history.create_index([("import_id", ASCENDING)])
@@ -596,9 +601,9 @@ def get_stats_timeseries() -> Response:
         total_messages += len(msgs)
         for msg in msgs:
             sender = msg.get("sender", "")
-            if sender == "human":
+            if sender == MessageRole.HUMAN:
                 human_messages += 1
-            elif sender == "assistant":
+            elif sender == MessageRole.ASSISTANT:
                 assistant_messages += 1
 
     # Calculate date range
@@ -633,9 +638,9 @@ def get_stats_timeseries() -> Response:
 
             for msg in conv.get("chat_messages", []):
                 sender = msg.get("sender", "")
-                if sender == "human":
+                if sender == MessageRole.HUMAN:
                     day_groups[day_key]["human_messages"] += 1
-                elif sender == "assistant":
+                elif sender == MessageRole.ASSISTANT:
                     day_groups[day_key]["assistant_messages"] += 1
 
     # Sort and format day data
@@ -669,9 +674,9 @@ def get_stats_timeseries() -> Response:
 
             for msg in conv.get("chat_messages", []):
                 sender = msg.get("sender", "")
-                if sender == "human":
+                if sender == MessageRole.HUMAN:
                     week_groups[week_key]["human_messages"] += 1
-                elif sender == "assistant":
+                elif sender == MessageRole.ASSISTANT:
                     week_groups[week_key]["assistant_messages"] += 1
 
     sorted_weeks = sorted(week_groups.keys())
@@ -703,9 +708,9 @@ def get_stats_timeseries() -> Response:
 
             for msg in conv.get("chat_messages", []):
                 sender = msg.get("sender", "")
-                if sender == "human":
+                if sender == MessageRole.HUMAN:
                     month_groups[month_key]["human_messages"] += 1
-                elif sender == "assistant":
+                elif sender == MessageRole.ASSISTANT:
                     month_groups[month_key]["assistant_messages"] += 1
 
     sorted_months = sorted(month_groups.keys())
@@ -1002,7 +1007,9 @@ def search_conversations() -> Response:
                             "as": "message",
                             "in": {
                                 "$cond": {
-                                    "if": {"$eq": ["$$message.sender", "assistant"]},
+                                    "if": {
+                                        "$eq": ["$$message.sender", MessageRole.ASSISTANT.value]
+                                    },
                                     "then": {"$size": {"$ifNull": ["$$message.content", []]}},
                                     "else": 0,
                                 }
@@ -1015,7 +1022,7 @@ def search_conversations() -> Response:
                         "$filter": {
                             "input": {"$ifNull": ["$chat_messages", []]},
                             "as": "message",
-                            "cond": {"$eq": ["$$message.sender", "human"]},
+                            "cond": {"$eq": ["$$message.sender", MessageRole.HUMAN.value]},
                         }
                     }
                 },
@@ -1024,7 +1031,7 @@ def search_conversations() -> Response:
                         "$filter": {
                             "input": {"$ifNull": ["$chat_messages", []]},
                             "as": "message",
-                            "cond": {"$eq": ["$$message.sender", "assistant"]},
+                            "cond": {"$eq": ["$$message.sender", MessageRole.ASSISTANT.value]},
                         }
                     }
                 },
@@ -1303,7 +1310,7 @@ def get_artifact(
     message = chat_messages[message_index]
 
     # Only assistant messages have artifacts in content blocks
-    if message.get("sender") != "assistant":
+    if message.get("sender") != MessageRole.ASSISTANT:
         return _json_response({"error": "Only assistant messages contain artifacts"}), 400
 
     content_blocks: list[dict[str, Any]] = message.get("content", [])

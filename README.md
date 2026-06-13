@@ -205,6 +205,7 @@ pre-commit run --all-files
 | `/analytics` | GET | Analytics dashboard |
 | `/stats` | GET | Stats & trends with interactive charts |
 | `/export` | GET | Export tools page |
+| `/health` | GET | Container health check (JSON; bypasses Basic Auth) |
 | `/api/search/conversations` | POST | Search with pagination/sorting |
 | `/api/conversation/<uuid>` | GET | Get single conversation |
 | `/api/project/<uuid>` | GET | Get project details |

@@ -179,6 +179,78 @@ class Account(BaseModel):
         extra = "allow"
 
 
+class Project(BaseModel):
+    """
+    Claude Project, as stored in the ``projects`` collection.
+
+    Canonical schema for the entity that ``app.py`` reads as a raw dict
+    (the ``/projects`` and ``/api/project/<uuid>`` handlers access ``uuid``,
+    ``name``, ``description``, ``is_private``, ``is_starter_project``, ``docs``
+    and ``prompt_template``). ``tests/test_schema_contracts.py`` pins these
+    fields so a model/consumer drift surfaces as a test failure (drift-risk
+    Finding #4).
+    """
+
+    # Core fields from actual MongoDB data
+    uuid: str | None = Field(None, description="Unique project UUID")
+    name: str | None = Field(None, description="Project name")
+    description: str | None = Field(None, description="Project description")
+    is_private: bool | None = Field(None, description="Privacy flag")
+    is_starter_project: bool | None = Field(None, description="Starter-project flag")
+    docs: list[dict[str, Any]] | None = Field(default_factory=list, description="Project documents")
+    prompt_template: list[dict[str, Any]] | None = Field(
+        default_factory=list, description="Prompt templates"
+    )
+    created_at: str | None = Field(None, description="When project was created (ISO string)")
+    updated_at: str | None = Field(None, description="Last update time (ISO string)")
+
+    # MongoDB internal/import fields (using aliases for underscore fields)
+    account_name: str | None = Field(
+        None, alias="_account_name", description="Account name for indexing"
+    )
+    import_id: str | None = Field(None, alias="_import_id", description="Import batch identifier")
+    imported_at: str | None = Field(
+        None, alias="_imported_at", description="When project was imported"
+    )
+
+    class Config:
+        """Pydantic configuration."""
+
+        extra = "allow"
+        populate_by_name = True
+
+
+class User(BaseModel):
+    """
+    User record, as stored in the ``users`` collection.
+
+    Canonical schema for the entity that ``app.py`` reads as a raw dict
+    (deduplication keys on ``uuid``/``id``; the ``email`` index references
+    ``email``). Pinned by ``tests/test_schema_contracts.py`` (drift-risk
+    Finding #4).
+    """
+
+    uuid: str | None = Field(None, description="Unique user UUID")
+    id: str | None = Field(None, description="Alternative identifier")
+    email: str | None = Field(None, description="User email")
+    name: str | None = Field(None, description="Display name")
+
+    # MongoDB internal/import fields (using aliases for underscore fields)
+    account_name: str | None = Field(
+        None, alias="_account_name", description="Account name for indexing"
+    )
+    import_id: str | None = Field(None, alias="_import_id", description="Import batch identifier")
+    imported_at: str | None = Field(
+        None, alias="_imported_at", description="When user was imported"
+    )
+
+    class Config:
+        """Pydantic configuration."""
+
+        extra = "allow"
+        populate_by_name = True
+
+
 class Conversation(BaseModel):
     """
     Complete conversation/chat session with Claude from MongoDB.
