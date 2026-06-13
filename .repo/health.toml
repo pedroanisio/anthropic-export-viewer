@@ -1,0 +1,118 @@
+# .repo/health.toml — Environment health requirements
+# Run `repo health` to check, `repo health export` to snapshot current state.
+
+[environment]
+# Privilege escalation: "auto", "sudo", "doas", "pkexec", or "none"
+privilege = "auto"
+
+# Allowed runtimes (empty = any). Values: "host", "docker", "podman", "lxc", "wsl", "kubernetes"
+allowed_runtimes = []
+
+# Required default shell (must be in /etc/shells). Comment out to skip.
+# required_shell = "zsh"
+
+# ── Tools ────────────────────────────────────────────────────────────
+# Each [tools.<name>] block declares a tool requirement.
+#
+# Fields:
+#   required      = true              # fail if missing (default: true)
+#   min_version   = "1.70.0"          # minimum version (numeric compare)
+#   exact_version = "20.11.0"         # exact version match
+#   command       = "python3"          # binary to probe (defaults to tool name)
+#   version_args  = ["--version"]      # args to get version (defaults to --version)
+#   url           = "https://..."      # source of truth for latest version / releases
+#   install       = "curl ... | sh"    # install command (shown when missing or outdated)
+#   latest_cmd    = "npm"              # command to check latest version
+#   latest_args   = ["view","X","version"] # args for latest check
+
+# [tools.git]
+# required = true
+# min_version = "2.30"
+# url = "https://git-scm.com/downloads"
+# install = "apt install git"
+
+# [tools.rustc]
+# required = true
+# min_version = "1.70.0"
+# url = "https://github.com/rust-lang/rust/releases"
+# install = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+
+# [tools.cargo]
+# required = true
+# url = "https://doc.rust-lang.org/cargo/getting-started/installation.html"
+
+# [tools.node]
+# required = true
+# min_version = "18.0.0"
+# url = "https://nodejs.org/en/download"
+# install = "curl -fsSL https://fnm.vercel.app/install | bash && fnm install --lts"
+
+# [tools.skills]
+# required = false
+# command = "npx"
+# version_args = ["skills", "--version"]
+# url = "https://www.npmjs.com/package/skills"
+# install = "npm install -g skills"
+
+# [tools.python]
+# required = false
+# command = "python3"
+# min_version = "3.10"
+# url = "https://www.python.org/downloads/"
+# install = "apt install python3"
+
+# [tools.docker]
+# required = false
+# url = "https://docs.docker.com/get-docker/"
+# install = "curl -fsSL https://get.docker.com | sh"
+
+# ── Custom checks ───────────────────────────────────────────────────
+# Each [checks.<name>] block defines a shell command assertion.
+# Exit code 0 = pass, non-zero = fail. Stdout/stderr shown on failure.
+#
+# Fields:
+#   command      = "test -f .env"       # shell command to run
+#   description  = "env file exists"    # shown in health output
+#   severity     = "error"              # "error" (fails check) or "warning"
+#   hint         = "cp .env.example .env" # shown on failure
+#   fix_cmd      = "cp .env.example .env" # auto-fix command for `repo health fix`
+#
+# fix_cmd values starting with "builtin:" are handled by the CLI:
+#   builtin:copy-doc CLAUDE.md          # copy embedded CLAUDE.md template
+#   builtin:copy-doc DISCLAIMER.md      # copy embedded DISCLAIMER.md template
+
+[checks.claude-md]
+command = "test -f CLAUDE.md"
+description = "CLAUDE.md exists at repo root"
+severity = "warning"
+hint = "Run `repo health fix` to copy the default template, then customize it"
+fix_cmd = "builtin:copy-doc CLAUDE.md"
+
+[checks.disclaimer-md]
+command = "test -f DISCLAIMER.md"
+description = "DISCLAIMER.md exists at repo root"
+severity = "warning"
+hint = "Run `repo health fix` to copy the default template, then customize it"
+fix_cmd = "builtin:copy-doc DISCLAIMER.md"
+
+[checks.readme-disclaimer-ref]
+command = "grep -q 'DISCLAIMER.md' README.md 2>/dev/null"
+description = "README.md references DISCLAIMER.md"
+severity = "warning"
+hint = "Add a Disclaimer section to README.md that references DISCLAIMER.md (required by CLAUDE.md)"
+
+# [checks.env-file]
+# command = "test -f .env"
+# description = ".env file must exist"
+# severity = "error"
+# hint = "cp .env.example .env"
+
+# [checks.no-fixme]
+# command = "! grep -r FIXME src/"
+# description = "No FIXME comments in source"
+# severity = "warning"
+
+# [checks.cargo-builds]
+# command = "cargo check --quiet"
+# description = "Project compiles"
+# severity = "error"

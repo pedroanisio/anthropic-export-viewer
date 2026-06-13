@@ -1,0 +1,35 @@
+{
+  "skill_name": "advanced-dataviz",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a CSV with monthly sales data across 5 product categories over 3 years. Build me an interactive dashboard where I can explore trends, compare categories, and drill down into specific months.",
+      "expected_output": "A React artifact with: multi-line trend chart, category comparison bar chart, cross-filtering between views, drill-down from year to month, KPI summary cards, sortable data table, tooltips on all elements, and a cohesive visual design.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Here's a dataset of 2000 customers with age, income, spending score, and membership tier. Help me find interesting patterns and correlations in this data visually.",
+      "expected_output": "A React artifact with: scatter plot matrix or parallel coordinates for correlation discovery, distribution histograms, interactive brushing to select customer segments, filter by membership tier, animated transitions, and a data table for detail.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I want to visualize our company's org structure and headcount by department and team, with the ability to click into each department to see team-level breakdown and individual roles.",
+      "expected_output": "A React artifact with: treemap or sunburst chart showing hierarchy, click-to-drill-down from department to team to individual, breadcrumb navigation, smooth animated transitions between levels, headcount KPI cards, and search functionality.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Show me a real-time style KPI dashboard for an e-commerce store with revenue, orders, conversion rate, average order value, and a breakdown by traffic source.",
+      "expected_output": "A React artifact with: 4-5 KPI cards with sparklines and change indicators, main revenue trend line chart, traffic source breakdown (bar or donut), cross-filtering, dark mode toggle, and animated entrance effects.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "I uploaded a spreadsheet with survey results. 500 respondents rated 10 features on a 1-5 scale. Visualize this so I can quickly see which features are most loved, most polarizing, and how different user segments feel.",
+      "expected_output": "A React artifact with: diverging stacked bar chart or box plots for feature ratings, segment filter (dropdown or toggle), heatmap of average ratings by segment × feature, distribution view per feature, interactive sorting, and export capability.",
+      "files": []
+    }
+  ]
+}
