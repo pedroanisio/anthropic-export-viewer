@@ -6,14 +6,14 @@ These models validate and parse data from Claude conversation exports.
 
 from __future__ import annotations
 
-from datetime import datetime
-from enum import Enum
+from datetime import datetime  # noqa: TC003 - Pydantic resolves postponed annotations at runtime.
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class MessageRole(str, Enum):
+class MessageRole(StrEnum):
     """Enum for message roles (based on actual MongoDB data)."""
 
     HUMAN = "human"  # User messages in actual data
@@ -24,7 +24,7 @@ class MessageRole(str, Enum):
     RESPONSE = "response"
 
 
-class ContentBlockType(str, Enum):
+class ContentBlockType(StrEnum):
     """Enum for content block types (based on actual MongoDB data)."""
 
     # Core types found in actual data
@@ -52,15 +52,11 @@ class ContentBlock(BaseModel):
     Based on actual MongoDB data structure from Anthropic conversations.
     """
 
-    type: ContentBlockType = Field(
-        ..., description="Type of content block: 'text' or 'thinking'"
-    )
+    type: ContentBlockType = Field(..., description="Type of content block: 'text' or 'thinking'")
 
     # Core content fields (based on type)
     text: str | None = Field(None, description="Response text content (for type='text')")
-    thinking: str | None = Field(
-        None, description="Thinking process content (for type='thinking')"
-    )
+    thinking: str | None = Field(None, description="Thinking process content (for type='thinking')")
 
     # Metadata fields found in actual data
     citations: list[dict[str, Any]] | None = Field(
@@ -69,23 +65,15 @@ class ContentBlock(BaseModel):
     summaries: list[dict[str, str]] | None = Field(
         default_factory=list, description="AI-generated summaries"
     )
-    start_timestamp: str | None = Field(
-        None, description="When content generation started"
-    )
-    stop_timestamp: str | None = Field(
-        None, description="When content generation ended"
-    )
+    start_timestamp: str | None = Field(None, description="When content generation started")
+    stop_timestamp: str | None = Field(None, description="When content generation ended")
     cut_off: bool | None = Field(None, description="Whether content was cut off")
     flags: Any | None = Field(None, description="Content flags (usually null)")
 
     # Legacy fields that might appear in other formats
     data: str | None = Field(None, description="Alternative content field")
-    language: str | None = Field(
-        None, description="Programming language for code blocks"
-    )
-    source: dict[str, Any] | None = Field(
-        None, description="Source info for images/documents"
-    )
+    language: str | None = Field(None, description="Programming language for code blocks")
+    source: dict[str, Any] | None = Field(None, description="Source info for images/documents")
     title: str | None = Field(None, description="Title for artifacts or documents")
     id: str | None = Field(None, description="Unique identifier for artifacts")
     mime_type: str | None = Field(None, description="MIME type for artifacts")
@@ -107,17 +95,13 @@ class Attachment(BaseModel):
     file_name: str | None = Field(None, description="Name of the file")
     file_type: str | None = Field(None, description="Type/extension of file")
     file_size: int | None = Field(None, description="File size in bytes")
-    extracted_content: str | None = Field(
-        None, description="Extracted text content from documents"
-    )
+    extracted_content: str | None = Field(None, description="Extracted text content from documents")
 
     # Legacy fields that might appear in other formats
     file_id: str | None = Field(None, description="Unique file identifier")
     media_type: str | None = Field(None, description="MIME type")
     size: int | None = Field(None, description="Alternative size field")
-    extracted_text: str | None = Field(
-        None, description="Alternative extracted content field"
-    )
+    extracted_text: str | None = Field(None, description="Alternative extracted content field")
 
     class Config:
         """Pydantic configuration."""
@@ -134,9 +118,7 @@ class Message(BaseModel):
 
     # Core fields from actual MongoDB data
     uuid: str | None = Field(None, description="Unique message identifier")
-    sender: str | None = Field(
-        None, description="Message sender: 'human' or 'assistant'"
-    )
+    sender: str | None = Field(None, description="Message sender: 'human' or 'assistant'")
     text: str | None = Field(None, description="Plain text version of the message")
     content: list[ContentBlock] | None = Field(
         None, description="Array of structured content blocks"
@@ -147,20 +129,14 @@ class Message(BaseModel):
     files: list[dict[str, Any]] | None = Field(
         default_factory=list, description="Files array (related to attachments)"
     )
-    created_at: str | None = Field(
-        None, description="When message was created (ISO string)"
-    )
-    updated_at: str | None = Field(
-        None, description="When message was last updated (ISO string)"
-    )
+    created_at: str | None = Field(None, description="When message was created (ISO string)")
+    updated_at: str | None = Field(None, description="When message was last updated (ISO string)")
 
     # Legacy/alternative fields that might appear
     index: int | None = Field(None, description="Sequential index of the message")
     type: str | None = Field(None, description="Message type (prompt/response)")
     role: MessageRole | None = Field(None, description="Role (user/assistant)")
-    message: list[ContentBlock] | None = Field(
-        None, description="Alternative content blocks field"
-    )
+    message: list[ContentBlock] | None = Field(None, description="Alternative content blocks field")
     timestamp: datetime | None = Field(None, description="Alternative timestamp field")
 
     class Config:
@@ -217,21 +193,15 @@ class Conversation(BaseModel):
     chat_messages: list[Message] | None = Field(
         None, description="Array of messages in conversation"
     )
-    created_at: str | None = Field(
-        None, description="When conversation started (ISO string)"
-    )
+    created_at: str | None = Field(None, description="When conversation started (ISO string)")
     updated_at: str | None = Field(None, description="Last update time (ISO string)")
 
     # MongoDB internal/import fields (using aliases for underscore fields)
-    mongo_id: str | None = Field(
-        None, alias="_id", description="MongoDB document ID"
-    )
+    mongo_id: str | None = Field(None, alias="_id", description="MongoDB document ID")
     account_name: str | None = Field(
         None, alias="_account_name", description="Account name for indexing"
     )
-    import_id: str | None = Field(
-        None, alias="_import_id", description="Import batch identifier"
-    )
+    import_id: str | None = Field(None, alias="_import_id", description="Import batch identifier")
     import_ids: list[str] | None = Field(
         None, alias="_import_ids", description="List of import IDs"
     )
@@ -242,12 +212,8 @@ class Conversation(BaseModel):
     # Legacy/alternative fields that might appear in other formats
     id: str | None = Field(None, description="Alternative unique identifier")
     title: str | None = Field(None, description="Alternative title field")
-    messages: list[Message] | None = Field(
-        None, description="Alternative messages field"
-    )
-    chats: list[Message] | None = Field(
-        None, description="Another alternative messages field"
-    )
+    messages: list[Message] | None = Field(None, description="Alternative messages field")
+    chats: list[Message] | None = Field(None, description="Another alternative messages field")
 
     # Additional metadata
     summary: str | None = Field(None, description="AI-generated summary")
@@ -256,9 +222,7 @@ class Conversation(BaseModel):
         default_factory=list, description="Artifacts created in this conversation"
     )
     project_id: str | None = Field(None, description="Associated project ID if any")
-    is_deleted: bool | None = Field(
-        False, description="Whether conversation was deleted"
-    )
+    is_deleted: bool | None = Field(False, description="Whether conversation was deleted")
     tags: list[str] | None = Field(default_factory=list, description="User tags")
 
     class Config:
@@ -284,9 +248,7 @@ class ExportMetadata(BaseModel):
     exported_at: datetime | None = Field(None, description="When export was created")
     export_version: str | None = Field(None, description="Export format version")
     user_id: str | None = Field(None, description="User identifier")
-    total_conversations: int | None = Field(
-        None, description="Total conversation count"
-    )
+    total_conversations: int | None = Field(None, description="Total conversation count")
 
     class Config:
         """Pydantic configuration."""
@@ -301,23 +263,15 @@ class ClaudeExport(BaseModel):
     This represents the structure of conversations.json file.
     """
 
-    conversations: list[Conversation] | None = Field(
-        None, description="Array of all conversations"
-    )
+    conversations: list[Conversation] | None = Field(None, description="Array of all conversations")
     # Some exports might structure it differently
-    data: list[Conversation] | None = Field(
-        None, description="Alternative field name"
-    )
+    data: list[Conversation] | None = Field(None, description="Alternative field name")
 
     metadata: ExportMetadata | None = Field(None, description="Export metadata")
-    meta: dict[str, Any] | None = Field(
-        None, description="Alternative metadata field"
-    )
+    meta: dict[str, Any] | None = Field(None, description="Alternative metadata field")
 
     # User information (if included)
-    user: dict[str, Any] | None = Field(
-        None, description="User account information"
-    )
+    user: dict[str, Any] | None = Field(None, description="User account information")
 
     class Config:
         """Pydantic configuration."""

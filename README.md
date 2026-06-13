@@ -1,4 +1,10 @@
 # Anthropic Data Exporter Viewer
+
+## Disclaimer
+
+This work is subject to the methodological caveats and commitments described in [@DISCLAIMER.md](./DISCLAIMER.md).
+> No statement or premise not backed by a real logical definition or verifiable reference should be taken for granted.
+
 A complete application for managing Anthropic data exports from multiple accounts with deduplication, search, and visualization.
 
 ## Features
@@ -32,8 +38,9 @@ A complete application for managing Anthropic data exports from multiple account
 git clone https://github.com/pedroanisio/anthropic-export-viewer.git
 cd anthropic-export-viewer
 
-# Copy environment template
+# Copy environment template and set required secrets
 cp env.example .env
+# Edit SECRET_KEY, MONGO_ROOT_PASSWORD, APP_BASIC_AUTH_USERNAME, and APP_BASIC_AUTH_PASSWORD
 
 # Start with Docker Compose
 docker compose up -d
@@ -119,14 +126,20 @@ Configuration is managed via environment variables with type-safe defaults using
 | `MAX_CONTENT_LENGTH` | `524288000` | Max upload size (500MB) |
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `LOG_FORMAT` | `console` | Log format (`console` or `json`) |
+| `APP_BASIC_AUTH_USERNAME` | unset | Required app username when `FLASK_ENV=production` |
+| `APP_BASIC_AUTH_PASSWORD` | unset | Required app password when `FLASK_ENV=production` |
+| `MONGO_ROOT_USERNAME` | unset | Required by Docker Compose |
+| `MONGO_ROOT_PASSWORD` | unset | Required by Docker Compose |
 
 ### Example `.env` File
 
 ```bash
-SECRET_KEY=your-secure-secret-key-here
+SECRET_KEY=<generated-key>
 FLASK_ENV=production
 DEBUG=false
-MONGO_URI=mongodb://admin:password@mongodb:27017/
+MONGO_URI=mongodb://anthropic_admin:<password>@mongodb:27017/anthropic_data?authSource=admin
+APP_BASIC_AUTH_USERNAME=<username>
+APP_BASIC_AUTH_PASSWORD=<strong-password>
 LOG_LEVEL=INFO
 LOG_FORMAT=json
 ```
@@ -293,8 +306,12 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 # Update .env with production values
 SECRET_KEY=<generated-key>
+MONGO_ROOT_USERNAME=anthropic_admin
+MONGO_ROOT_PASSWORD=<strong-database-password>
+APP_BASIC_AUTH_USERNAME=<app-username>
+APP_BASIC_AUTH_PASSWORD=<strong-app-password>
 FLASK_ENV=production
-MONGO_URI=mongodb://admin:securepassword123@mongodb:27017/
+DEBUG=false
 
 # Start services
 docker compose up -d
@@ -305,8 +322,8 @@ docker compose up -d
 | Service | Port | Description |
 |---------|------|-------------|
 | `app` | 5000 | Flask application |
-| `mongodb` | 27017 | MongoDB database |
-| `mongo-express` | 8081 | Database admin UI |
+| `mongodb` | internal only | MongoDB database |
+| `mongo-express` | 8081 | Optional database admin UI via `docker compose --profile tools up -d` |
 
 ## Backup & Restore
 
@@ -314,8 +331,9 @@ docker compose up -d
 
 ```bash
 docker exec anthropic_mongodb mongodump \
-  --username admin \
-  --password securepassword123 \
+  --username "$MONGO_ROOT_USERNAME" \
+  --password "$MONGO_ROOT_PASSWORD" \
+  --authenticationDatabase admin \
   --out /data/backup
 
 docker cp anthropic_mongodb:/data/backup ./backup
@@ -327,8 +345,9 @@ docker cp anthropic_mongodb:/data/backup ./backup
 docker cp ./backup anthropic_mongodb:/data/backup
 
 docker exec anthropic_mongodb mongorestore \
-  --username admin \
-  --password securepassword123 \
+  --username "$MONGO_ROOT_USERNAME" \
+  --password "$MONGO_ROOT_PASSWORD" \
+  --authenticationDatabase admin \
   /data/backup
 ```
 
@@ -366,10 +385,10 @@ LOG_FORMAT=json docker compose up
 ⚠️ **For production use**:
 
 - Generate a secure `SECRET_KEY`
-- Change default MongoDB passwords
+- Set strong MongoDB and app Basic Auth credentials
 - Use environment variables for all secrets
 - Enable HTTPS with nginx reverse proxy
-- Consider adding user authentication
+- Keep `mongo-express` disabled unless actively needed
 - Run security scans: `bandit -r src/`
 
 ## Roadmap

@@ -13,7 +13,7 @@ import sys
 import tempfile
 import zipfile
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import mongomock
@@ -23,6 +23,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from flask import Flask
     from flask.testing import FlaskClient
 
@@ -253,9 +255,7 @@ def populated_db(
     sample_user["_imported_at"] = datetime.now()
 
     # Insert data
-    mock_db.conversations.insert_many(
-        [sample_conversation, sample_conversation_with_attachments]
-    )
+    mock_db.conversations.insert_many([sample_conversation, sample_conversation_with_attachments])
     mock_db.projects.insert_one(sample_project)
     mock_db.users.insert_one(sample_user)
     mock_db.import_history.insert_one(
@@ -270,4 +270,3 @@ def populated_db(
     )
 
     return mock_db
-

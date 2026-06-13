@@ -6,11 +6,11 @@ Tests validate that models correctly parse and validate Anthropic data structure
 
 from __future__ import annotations
 
+import os
+import sys
+
 import pytest
 from pydantic import ValidationError
-
-import sys
-import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -25,6 +25,11 @@ from models import (
     ExportMetadata,
     Message,
     MessageRole,
+)
+from response_models import (
+    HeatmapResponse,
+    SearchConversationsResponse,
+    TimeseriesResponse,
 )
 
 
@@ -160,9 +165,7 @@ class TestMessage:
             uuid="msg-456",
             sender="assistant",
             text="Hello! How can I help?",
-            content=[
-                ContentBlock(type=ContentBlockType.TEXT, text="Hello! How can I help?")
-            ],
+            content=[ContentBlock(type=ContentBlockType.TEXT, text="Hello! How can I help?")],
         )
         assert message.sender == "assistant"
         assert message.content is not None
@@ -175,9 +178,7 @@ class TestMessage:
             uuid="msg-789",
             sender="human",
             text="Please analyze this file.",
-            attachments=[
-                Attachment(file_name="data.csv", file_type="csv", file_size=5000)
-            ],
+            attachments=[Attachment(file_name="data.csv", file_type="csv", file_size=5000)],
         )
         assert message.attachments is not None
         assert len(message.attachments) == 1
@@ -271,6 +272,12 @@ class TestClaudeExport:
         assert found is not None
         assert found.uuid == "conv-1"
 
+    def test_get_conversation_by_title_returns_none(self) -> None:
+        """Test title lookup miss."""
+        export = ClaudeExport(conversations=[Conversation(uuid="conv-1", name="First Chat")])
+
+        assert export.get_conversation_by_title("Missing") is None
+
     def test_get_total_message_count(self) -> None:
         """Test counting total messages across conversations."""
         export = ClaudeExport(
@@ -291,6 +298,18 @@ class TestClaudeExport:
             ]
         )
         assert export.get_total_message_count() == 3
+
+    def test_get_artifacts(self) -> None:
+        """Test collecting artifacts across conversations."""
+        artifact = Artifact(id="artifact-1", type="code", content="print('x')")
+        export = ClaudeExport(
+            conversations=[
+                Conversation(uuid="conv-1", artifacts=[artifact]),
+                Conversation(uuid="conv-2", artifacts=[]),
+            ]
+        )
+
+        assert export.get_artifacts() == [artifact]
 
 
 class TestArtifact:
@@ -351,3 +370,104 @@ class TestExportMetadata:
         assert metadata.export_version == "1.0"
         assert metadata.total_conversations == 42
 
+
+class TestApiResponseContracts:
+    """Tests for API response contract models."""
+
+    def test_timeseries_response_contract(self) -> None:
+        """Test creating a full timeseries response contract."""
+        response = TimeseriesResponse(
+            summary={
+                "total_conversations": 3,
+                "total_messages": 8,
+                "avg_per_day": 2.5,
+                "data_span_days": 4,
+                "conversation_trend": 1,
+            },
+            time_series={
+                "day": [
+                    {
+                        "date": "2024-01-01",
+                        "label": "Jan 1",
+                        "conversations": 2,
+                        "human_messages": 3,
+                        "assistant_messages": 3,
+                    }
+                ],
+                "week": [],
+                "month": [],
+            },
+            message_distribution={"human": 4, "assistant": 4},
+            account_distribution=[{"account": "work", "count": 2}],
+            day_of_week_distribution=[{"day": 1, "count": 2}],
+            hour_of_day_distribution=[{"hour": 13, "count": 2}],
+            length_distribution=[{"bucket": "1-5", "count": 1}],
+        )
+
+        assert response.summary.total_conversations == 3
+        assert response.time_series.day[0].assistant_messages == 3
+        assert response.account_distribution[0].account == "work"
+
+    def test_heatmap_response_contract_forbids_extra_fields(self) -> None:
+        """Test heatmap contract validation and strict extra-field rejection."""
+        response = HeatmapResponse(
+            year=2024,
+            daily_counts={"2024-01-01": 2},
+            stats={
+                "total_conversations": 2,
+                "active_days": 1,
+                "avg_per_day": 2.0,
+                "max_in_day": 2,
+            },
+            available_years=[2024],
+        )
+
+        assert response.stats.max_in_day == 2
+
+        with pytest.raises(ValidationError):
+            HeatmapResponse(
+                year=2024,
+                daily_counts={},
+                stats={
+                    "total_conversations": 0,
+                    "active_days": 0,
+                    "avg_per_day": 0.0,
+                    "max_in_day": 0,
+                },
+                available_years=[],
+                unexpected=True,
+            )
+
+    def test_search_response_contract_aliases_and_dump(self) -> None:
+        """Test search contract aliases match Mongo-shaped API output."""
+        response = SearchConversationsResponse(
+            conversations=[
+                {
+                    "_id": "mongo-1",
+                    "uuid": "conv-1",
+                    "name": "Planning",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "updated_at": None,
+                    "_account_name": "personal",
+                    "message_count": 5,
+                    "attachment_count": 1,
+                    "artifact_count": 2,
+                    "user_message_count": 3,
+                    "assistant_message_count": 2,
+                }
+            ],
+            pagination={
+                "page": 1,
+                "per_page": 20,
+                "total_count": 1,
+                "total_pages": 1,
+                "has_prev": False,
+                "has_next": False,
+            },
+            sort_info={"sort_by": "created_at", "sort_order": "desc"},
+        )
+
+        conversation = response.conversations[0]
+        assert conversation.mongo_id == "mongo-1"
+        assert conversation.account_name == "personal"
+        assert response.model_dump(by_alias=True)["conversations"][0]["_id"] == "mongo-1"

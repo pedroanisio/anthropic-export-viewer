@@ -1,6 +1,20 @@
+---
+disclaimer:
+  notice: >-
+    No information within this document should be taken for granted.
+    Any statement or premise not backed by a real logical definition
+    or verifiable reference may be invalid, erroneous, or a hallucination.
+  generated_by: "Claude Opus 4.8 (1M context) via Claude Code"
+  date: "2026-06-13"
+---
+
 # Anthropic Data Manager - Data Dictionary
 
 > **Project Overview**: Complete application for managing Anthropic data exports from multiple accounts with deduplication, search, and visualization capabilities.
+
+> **Route & config tables are pinned to the code** by `tests/test_doc_sync.py`:
+> adding a Flask route or a `Settings` field without documenting it here fails
+> that test. See `drift-risk-map.md` Finding #2.
 
 ---
 
@@ -189,8 +203,10 @@ db.import_history.createIndex({"timestamp": 1})
 | `/conversations` | GET | Conversations browser page | `conversations.html` |
 | `/projects` | GET | Projects browser with pagination | `projects.html` |
 | `/analytics` | GET | Analytics dashboard | `analytics.html` |
+| `/stats` | GET | Stats & trends page with interactive charts | `stats.html` |
 | `/export` | GET | Export tools page | `export.html` |
 | `/upload` | GET/POST | File upload interface | `upload.html` |
+| `/health` | GET | Container health check (JSON, bypasses Basic Auth) | — (JSON response) |
 
 ### REST API Endpoints
 
@@ -202,6 +218,8 @@ db.import_history.createIndex({"timestamp": 1})
 | `/api/export/conversation/<uuid>` | GET | Export single conversation as JSON | uuid |
 | `/api/export/messages` | POST | Export selected messages (JSON/CSV) | conversation_uuid, message_indices, format |
 | `/api/stats` | GET | Get database statistics | - |
+| `/api/stats/timeseries` | GET | Time-series stats for charts (contract: `TimeseriesResponse`) | days, group_by |
+| `/api/stats/heatmap` | GET | Activity-calendar heatmap data (contract: `HeatmapResponse`) | year |
 | `/api/accounts` | GET | List imported accounts | - |
 | `/api/attachment/<uuid>/<msg_idx>/<att_idx>` | GET | Get attachment metadata | conversation_uuid, message_index, attachment_index |
 | `/api/artifact/<uuid>/<msg_idx>/<cnt_idx>` | GET | Get assistant artifact | conversation_uuid, message_index, content_index |
@@ -292,15 +310,27 @@ db.import_history.createIndex({"timestamp": 1})
 
 ## 🚀 Configuration & Deployment
 
-### 1. Flask Application Configuration
+### 1. Application Configuration (canonical — all `Settings` fields)
 
-| Setting | Default | Purpose |
-|---------|---------|---------|
-| `SECRET_KEY` | 'your-secret-key-change-in-production' | Session security |
-| `UPLOAD_FOLDER` | './uploads' | Temporary file storage |
-| `MAX_CONTENT_LENGTH` | 500MB | File upload limit |
-| `MONGO_URI` | 'mongodb://localhost:27017/' | Database connection |
-| `DB_NAME` | 'anthropic_data' | Database name |
+> Source of truth: `src/config.py` (`Settings`). This table enumerates **every**
+> field; it is pinned to the code by `tests/test_doc_sync.py`, which fails if a
+> `Settings` field is added without documenting its environment variable here.
+
+| Environment Variable | Setting | Default | Purpose |
+|----------------------|---------|---------|---------|
+| `SECRET_KEY` | `secret_key` | generated per-process via `secrets.token_hex(32)` | Flask session security; must be set explicitly in production |
+| `FLASK_ENV` | `flask_env` | `development` | Flask environment (`development`/`production`/`testing`) |
+| `DEBUG` | `debug` | `false` | Enable Flask debug mode (must be false in production) |
+| `HOST` | `host` | `0.0.0.0` | Server bind address |
+| `PORT` | `port` | `5000` | Server port (1–65535) |
+| `MONGO_URI` | `mongo_uri` | `mongodb://localhost:27017/` | MongoDB connection URI |
+| `DB_NAME` | `db_name` | `anthropic_data` | MongoDB database name |
+| `UPLOAD_FOLDER` | `upload_folder` | `./uploads` | Temporary file storage |
+| `MAX_CONTENT_LENGTH` | `max_content_length` | `524288000` (500 MB) | Maximum upload size in bytes |
+| `APP_BASIC_AUTH_USERNAME` | `app_basic_auth_username` | `None` | Username for app-wide HTTP Basic Auth (required in production) |
+| `APP_BASIC_AUTH_PASSWORD` | `app_basic_auth_password` | `None` | Password for app-wide HTTP Basic Auth (≥16 chars in production) |
+| `LOG_LEVEL` | `log_level` | `INFO` | Application log level |
+| `LOG_FORMAT` | `log_format` | `console` | Log output format (`console`/`json`) |
 
 ### 2. Docker Services
 

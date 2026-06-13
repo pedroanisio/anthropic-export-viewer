@@ -16,6 +16,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from config import Settings, get_settings
 
+PRODUCTION_ENV = {
+    "FLASK_ENV": "production",
+    "SECRET_KEY": "a" * 64,
+    "MONGO_URI": "mongodb://user:password@mongodb:27017/anthropic_data?authSource=admin",
+    "APP_BASIC_AUTH_USERNAME": "admin",
+    "APP_BASIC_AUTH_PASSWORD": "strong-production-password",
+}
+
 
 class TestSettings:
     """Tests for Settings configuration class."""
@@ -53,17 +61,51 @@ class TestSettings:
 
     def test_flask_env_normalization(self) -> None:
         """Test that flask_env is normalized to lowercase."""
-        with patch.dict(os.environ, {"FLASK_ENV": "PRODUCTION"}, clear=True):
+        with patch.dict(os.environ, {**PRODUCTION_ENV, "FLASK_ENV": "PRODUCTION"}, clear=True):
             settings = Settings()
             assert settings.flask_env == "production"
 
+    def test_flask_env_validator_passes_non_string_value(self) -> None:
+        """Test validator passthrough branch for non-string values."""
+        assert Settings.validate_flask_env(123) == 123
+
     def test_is_production_property(self) -> None:
         """Test is_production property."""
-        with patch.dict(os.environ, {"FLASK_ENV": "production"}, clear=True):
+        with patch.dict(os.environ, PRODUCTION_ENV, clear=True):
             settings = Settings()
             assert settings.is_production is True
             assert settings.is_development is False
             assert settings.is_testing is False
+
+    def test_production_requires_explicit_secret_key(self) -> None:
+        """Test that production rejects generated or placeholder secret keys."""
+        env = {k: v for k, v in PRODUCTION_ENV.items() if k != "SECRET_KEY"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ValueError):
+            Settings()
+
+    def test_production_rejects_default_mongo_uri(self) -> None:
+        """Test that production rejects development MongoDB defaults."""
+        env = {**PRODUCTION_ENV, "MONGO_URI": "mongodb://localhost:27017/"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ValueError):
+            Settings()
+
+    def test_production_rejects_debug_mode(self) -> None:
+        """Test that production rejects debug mode."""
+        env = {**PRODUCTION_ENV, "DEBUG": "true"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ValueError):
+            Settings()
+
+    def test_production_requires_basic_auth_username(self) -> None:
+        """Test that production requires a Basic Auth username."""
+        env = {k: v for k, v in PRODUCTION_ENV.items() if k != "APP_BASIC_AUTH_USERNAME"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ValueError):
+            Settings()
+
+    def test_production_requires_basic_auth_password(self) -> None:
+        """Test that production requires a strong Basic Auth password."""
+        env = {**PRODUCTION_ENV, "APP_BASIC_AUTH_PASSWORD": "short"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ValueError):
+            Settings()
 
     def test_is_development_property(self) -> None:
         """Test is_development property."""
@@ -81,15 +123,13 @@ class TestSettings:
 
     def test_port_validation_min(self) -> None:
         """Test that port must be at least 1."""
-        with patch.dict(os.environ, {"PORT": "0"}, clear=True):
-            with pytest.raises(ValueError):
-                Settings()
+        with patch.dict(os.environ, {"PORT": "0"}, clear=True), pytest.raises(ValueError):
+            Settings()
 
     def test_port_validation_max(self) -> None:
         """Test that port must be at most 65535."""
-        with patch.dict(os.environ, {"PORT": "70000"}, clear=True):
-            with pytest.raises(ValueError):
-                Settings()
+        with patch.dict(os.environ, {"PORT": "70000"}, clear=True), pytest.raises(ValueError):
+            Settings()
 
     def test_max_content_length_from_env(self) -> None:
         """Test loading max content length from environment."""
@@ -126,4 +166,3 @@ class TestGetSettings:
         settings1 = get_settings()
         settings2 = get_settings()
         assert settings1 is settings2
-

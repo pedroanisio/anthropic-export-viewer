@@ -11,16 +11,13 @@ import os
 import sys
 import tempfile
 import zipfile
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import patch
 
 import mongomock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.fixture
@@ -54,17 +51,16 @@ class TestDataProcessorZipProcessing:
                 )
 
             # Patch the db module-level variable
-            with patch("app.db", data_processor_db):
-                with patch("app.app") as mock_app:
-                    mock_app.config = {"UPLOAD_FOLDER": tempfile.gettempdir()}
+            with patch("app.db", data_processor_db), patch("app.app") as mock_app:
+                mock_app.config = {"UPLOAD_FOLDER": tempfile.gettempdir()}
 
-                    from app import DataProcessor
+                from app import DataProcessor
 
-                    result = DataProcessor.process_zip(tmp.name, "Test Account")
+                result = DataProcessor.process_zip(tmp.name, "Test Account")
 
-                    assert result["import_id"] is not None
-                    assert result["account_name"] == "Test Account"
-                    assert result["conversations"]["loaded"] == 1
+                assert result["import_id"] is not None
+                assert result["account_name"] == "Test Account"
+                assert result["conversations"]["loaded"] == 1
 
             os.unlink(tmp.name)
 
@@ -97,16 +93,15 @@ class TestDataProcessorZipProcessing:
                     ),
                 )
 
-            with patch("app.db", data_processor_db):
-                with patch("app.app") as mock_app:
-                    mock_app.config = {"UPLOAD_FOLDER": tempfile.gettempdir()}
+            with patch("app.db", data_processor_db), patch("app.app") as mock_app:
+                mock_app.config = {"UPLOAD_FOLDER": tempfile.gettempdir()}
 
-                    from app import DataProcessor
+                from app import DataProcessor
 
-                    result = DataProcessor.process_zip(tmp.name, "Test Account")
+                result = DataProcessor.process_zip(tmp.name, "Test Account")
 
-                    assert result["conversations"]["loaded"] == 0
-                    assert result["conversations"]["duplicates"] == 1
+                assert result["conversations"]["loaded"] == 0
+                assert result["conversations"]["duplicates"] == 1
 
             os.unlink(tmp.name)
 
@@ -129,19 +124,42 @@ class TestDataProcessorZipProcessing:
                     json.dumps([{"uuid": "user-1", "email": "test@example.com"}]),
                 )
 
-            with patch("app.db", data_processor_db):
-                with patch("app.app") as mock_app:
-                    mock_app.config = {"UPLOAD_FOLDER": tempfile.gettempdir()}
+            with patch("app.db", data_processor_db), patch("app.app") as mock_app:
+                mock_app.config = {"UPLOAD_FOLDER": tempfile.gettempdir()}
+
+                from app import DataProcessor
+
+                result = DataProcessor.process_zip(tmp.name, "Test Account")
+
+                assert result["conversations"]["loaded"] == 1
+                assert result["projects"]["loaded"] == 1
+                assert result["users"]["loaded"] == 1
+
+            os.unlink(tmp.name)
+
+    def test_process_zip_rejects_path_traversal(
+        self, data_processor_db: mongomock.Database[dict[str, Any]]
+    ) -> None:
+        """Test that ZIP entries cannot write outside the extraction directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upload_dir = os.path.join(tmpdir, "uploads")
+            os.makedirs(upload_dir)
+            escaped_path = os.path.join(upload_dir, "evil.json")
+
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+                with zipfile.ZipFile(tmp.name, "w") as zf:
+                    zf.writestr("../evil.json", json.dumps({"unsafe": True}))
+
+                with patch("app.db", data_processor_db), patch("app.app") as mock_app:
+                    mock_app.config = {"UPLOAD_FOLDER": upload_dir}
 
                     from app import DataProcessor
 
-                    result = DataProcessor.process_zip(tmp.name, "Test Account")
-
-                    assert result["conversations"]["loaded"] == 1
-                    assert result["projects"]["loaded"] == 1
-                    assert result["users"]["loaded"] == 1
+                    with pytest.raises(ValueError, match="Unsafe ZIP member path"):
+                        DataProcessor.process_zip(tmp.name, "Test Account")
 
             os.unlink(tmp.name)
+            assert not os.path.exists(escaped_path)
 
 
 class TestDataProcessorIndexes:
@@ -176,4 +194,3 @@ class TestDataProcessorIndexes:
             index_names = [idx["name"] for idx in indexes]
 
             assert any("uuid" in name for name in index_names)
-

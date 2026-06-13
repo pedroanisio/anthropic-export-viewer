@@ -4,56 +4,74 @@ services:
     container_name: anthropic_mongodb
     restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: securepassword123
-      MONGO_INITDB_DATABASE: anthropic_data
-    ports:
-      - "27017:27017"
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_NAME:-anthropic_data}
+    expose:
+      - "27017"
     volumes:
       - mongo_data:/data/db
       - mongo_config:/data/configdb
     networks:
       - anthropic_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
   app:
     build: .
     container_name: anthropic_app
     restart: unless-stopped
     environment:
-      MONGO_URI: mongodb://admin:securepassword123@mongodb:27017/
+      MONGO_URI: mongodb://${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}@mongodb:27017/${DB_NAME:-anthropic_data}?authSource=admin
+      DB_NAME: ${DB_NAME:-anthropic_data}
       FLASK_ENV: production
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-here}   
+      DEBUG: "false"
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+      APP_BASIC_AUTH_USERNAME: ${APP_BASIC_AUTH_USERNAME:?Set APP_BASIC_AUTH_USERNAME}
+      APP_BASIC_AUTH_PASSWORD: ${APP_BASIC_AUTH_PASSWORD:?Set APP_BASIC_AUTH_PASSWORD}
+      LOG_FORMAT: json
     ports:
       - "5000:5000"
     volumes:
-      - ./src:/app
-      - ./src/uploads:/app/uploads
-      - ./src/templates:/app/templates
+      - upload_data:/app/uploads
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - anthropic_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   mongo-express:
     image: mongo-express:latest
     container_name: anthropic_mongo_express
+    profiles:
+      - tools
     restart: unless-stopped
     environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: securepassword123
-      ME_CONFIG_MONGODB_URL: mongodb://admin:securepassword123@mongodb:27017/
-      ME_CONFIG_BASICAUTH_USERNAME: admin
-      ME_CONFIG_BASICAUTH_PASSWORD: adminpass
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USERNAME:?Set MONGO_EXPRESS_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:?Set MONGO_EXPRESS_PASSWORD}
     ports:
       - "8081:8081"
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - anthropic_network
 
 volumes:
   mongo_data:
   mongo_config:
+  upload_data:
 
 networks:
   anthropic_network:

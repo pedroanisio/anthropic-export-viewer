@@ -7,15 +7,18 @@ Complete application for loading and managing Anthropic data exports.
 
 from __future__ import annotations
 
-import hashlib
+import hmac
 import json
 import os
+import secrets
 import shutil
+import stat
 import zipfile
+from contextlib import suppress
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from flask import (
@@ -29,11 +32,8 @@ from flask import (
     send_file,
     url_for,
 )
-from flask.wrappers import Response
 from flask_cors import CORS
 from pymongo import ASCENDING, TEXT, MongoClient
-from pymongo.collection import Collection
-from pymongo.database import Database
 from werkzeug.utils import secure_filename
 
 from config import get_settings
@@ -41,6 +41,9 @@ from models import Attachment, ContentBlock, ContentBlockType
 
 if TYPE_CHECKING:
     import pandas as pd
+    from flask.wrappers import Response
+    from pymongo.collection import Collection
+    from pymongo.database import Database
     from pymongo.results import UpdateResult
 
 # Configure structured logging (ADR-013)
@@ -80,8 +83,23 @@ app.config["DB_NAME"] = settings.db_name
 CORS(app)
 
 
+def _json_response(*args: Any, **kwargs: Any) -> Response:
+    """Return a typed Flask JSON response for strict static checking."""
+    return cast("Response", jsonify(*args, **kwargs))
+
+
+def _file_response(*args: Any, **kwargs: Any) -> Response:
+    """Return a typed Flask file response for strict static checking."""
+    return send_file(*args, **kwargs)
+
+
+def _redirect_response(location: str) -> Response:
+    """Return a typed Flask redirect response for strict static checking."""
+    return cast("Response", redirect(location))
+
+
 # Jinja2 template filters for human-readable display
-@app.template_filter("humandate")
+@app.template_filter("humandate")  # type: ignore[untyped-decorator]
 def humandate_filter(value: datetime | str | None) -> str:
     """Convert datetime to human-readable format (e.g., 'Dec 2, 2025')."""
     if value is None:
@@ -90,11 +108,11 @@ def humandate_filter(value: datetime | str | None) -> str:
         try:
             value = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
-            return value
+            return str(value)
     return value.strftime("%b %d, %Y")
 
 
-@app.template_filter("relativedate")
+@app.template_filter("relativedate")  # type: ignore[untyped-decorator]
 def relativedate_filter(value: datetime | str | None) -> str:
     """Convert datetime to relative format (e.g., '2 days ago')."""
     if value is None:
@@ -103,7 +121,7 @@ def relativedate_filter(value: datetime | str | None) -> str:
         try:
             value = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
-            return value
+            return str(value)
 
     now = datetime.now(value.tzinfo) if value.tzinfo else datetime.now()
     diff = now - value
@@ -130,7 +148,7 @@ def relativedate_filter(value: datetime | str | None) -> str:
     return f"{years} year{'s' if years != 1 else ''} ago"
 
 
-@app.template_filter("truncate_uuid")
+@app.template_filter("truncate_uuid")  # type: ignore[untyped-decorator]
 def truncate_uuid_filter(value: str | None, length: int = 8) -> str:
     """Truncate UUID to first N characters with ellipsis."""
     if value is None:
@@ -144,8 +162,80 @@ def truncate_uuid_filter(value: str | None, length: int = 8) -> str:
 Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
 
 # MongoDB setup
-mongo_client: MongoClient[dict[str, Any]] = MongoClient(app.config["MONGO_URI"])
+mongo_client: MongoClient[dict[str, Any]] = MongoClient(
+    app.config["MONGO_URI"],
+    serverSelectionTimeoutMS=2000,
+)
 db: Database[dict[str, Any]] = mongo_client[app.config["DB_NAME"]]
+
+
+def _authentication_required_response() -> Response:
+    response = make_response("Authentication required", 401)
+    response.headers["WWW-Authenticate"] = 'Basic realm="Anthropic Export Viewer"'
+    return response
+
+
+@app.before_request
+def require_basic_auth() -> Response | None:
+    """Require app-wide Basic Auth when running in production."""
+    if request.endpoint == "health" or not settings.is_production:
+        return None
+
+    username = settings.app_basic_auth_username
+    password = settings.app_basic_auth_password
+    auth = request.authorization
+    if (
+        auth
+        and username
+        and password
+        and hmac.compare_digest(auth.username or "", username)
+        and hmac.compare_digest(auth.password or "", password)
+    ):
+        return None
+
+    return _authentication_required_response()
+
+
+@app.route("/health")
+def health() -> tuple[Response, int] | Response:
+    """Container health check endpoint."""
+    try:
+        db.command("ping")
+    except Exception as exc:
+        logger.warning("database_healthcheck_failed", error=str(exc))
+        return _json_response({"status": "unhealthy", "database": "unavailable"}), 503
+
+    return _json_response({"status": "ok", "database": "ok"})
+
+
+def _safe_extract_zip(zip_ref: zipfile.ZipFile, destination: str) -> None:
+    """Extract a ZIP archive after rejecting path traversal and symlink entries."""
+    destination_path = Path(destination).resolve()
+
+    for member in zip_ref.infolist():
+        member_path = destination_path / member.filename
+        resolved_member_path = member_path.resolve()
+        if resolved_member_path != destination_path and destination_path not in (
+            resolved_member_path,
+            *resolved_member_path.parents,
+        ):
+            raise ValueError(f"Unsafe ZIP member path: {member.filename}")
+
+        mode = member.external_attr >> 16
+        if stat.S_ISLNK(mode):
+            raise ValueError(f"Unsafe ZIP symlink entry: {member.filename}")
+
+    zip_ref.extractall(destination_path)
+
+
+def _parse_export_datetime(value: Any) -> datetime | None:
+    """Parse export timestamps into comparable naive datetimes."""
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None)
+    if isinstance(value, str):
+        with suppress(ValueError):
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    return None
 
 
 class DataProcessor:
@@ -177,14 +267,14 @@ class DataProcessor:
     @staticmethod
     def process_zip(filepath: str, account_name: str | None = None) -> dict[str, Any]:
         """Process uploaded zip file."""
-        import_id = hashlib.md5(f"{filepath}{datetime.now()}".encode()).hexdigest()[:12]
+        import_id = secrets.token_hex(6)
         temp_dir = f"{app.config['UPLOAD_FOLDER']}/temp_{import_id}"
 
         try:
             # Extract zip file
             os.makedirs(temp_dir, exist_ok=True)
             with zipfile.ZipFile(filepath, "r") as zip_ref:
-                zip_ref.extractall(temp_dir)
+                _safe_extract_zip(zip_ref, temp_dir)
 
             # Find JSON files
             json_files = list(Path(temp_dir).rglob("*.json"))
@@ -229,9 +319,7 @@ class DataProcessor:
                 shutil.rmtree(temp_dir)
 
     @staticmethod
-    def _load_conversations(
-        filepath: str, import_id: str, account_name: str
-    ) -> dict[str, int]:
+    def _load_conversations(filepath: str, import_id: str, account_name: str) -> dict[str, int]:
         """Load conversations with deduplication."""
         with open(filepath) as f:
             data: list[dict[str, Any]] = json.load(f)
@@ -260,9 +348,7 @@ class DataProcessor:
         return {"loaded": loaded, "duplicates": duplicates}
 
     @staticmethod
-    def _load_users(
-        filepath: str, import_id: str, account_name: str
-    ) -> dict[str, int]:
+    def _load_users(filepath: str, import_id: str, account_name: str) -> dict[str, int]:
         """Load users with deduplication."""
         with open(filepath) as f:
             data: list[dict[str, Any]] = json.load(f)
@@ -289,9 +375,7 @@ class DataProcessor:
         return {"loaded": loaded, "duplicates": duplicates}
 
     @staticmethod
-    def _load_projects(
-        filepath: str, import_id: str, account_name: str
-    ) -> dict[str, int]:
+    def _load_projects(filepath: str, import_id: str, account_name: str) -> dict[str, int]:
         """Load projects with deduplication."""
         with open(filepath) as f:
             data: list[dict[str, Any]] = json.load(f)
@@ -367,10 +451,7 @@ def projects() -> str:
     skip = (page - 1) * per_page
 
     projects_list = list(
-        db.projects.find(mongo_query, {"_id": 0})
-        .skip(skip)
-        .limit(per_page)
-        .sort("created_at", -1)
+        db.projects.find(mongo_query, {"_id": 0}).skip(skip).limit(per_page).sort("created_at", -1)
     )
 
     # Enhance projects with computed counts
@@ -445,7 +526,7 @@ def get_project_details(uuid: str) -> tuple[Response, int] | Response:
     project = db.projects.find_one({"uuid": uuid}, {"_id": 0})
 
     if not project:
-        return jsonify({"error": "Project not found"}), 404
+        return _json_response({"error": "Project not found"}), 404
 
     # Find related conversations for this project (if any reference exists)
     related_conversations = list(
@@ -466,7 +547,7 @@ def get_project_details(uuid: str) -> tuple[Response, int] | Response:
     )
 
     project["related_conversations"] = related_conversations
-    return jsonify(project)
+    return _json_response(project)
 
 
 @app.route("/analytics")
@@ -485,7 +566,6 @@ def stats_page() -> str:
 def get_stats_timeseries() -> Response:
     """Get time-series statistics for charts."""
     days = int(request.args.get("days", 30))
-    group_by = request.args.get("group_by", "day")
 
     # Build date filter
     date_filter: dict[str, Any] = {}
@@ -524,15 +604,9 @@ def get_stats_timeseries() -> Response:
     # Calculate date range
     all_dates = []
     for conv in conversations:
-        created = conv.get("created_at")
+        created = _parse_export_datetime(conv.get("created_at"))
         if created:
-            if isinstance(created, str):
-                try:
-                    all_dates.append(datetime.fromisoformat(created.replace("Z", "+00:00")))
-                except ValueError:
-                    pass
-            elif isinstance(created, datetime):
-                all_dates.append(created)
+            all_dates.append(created)
 
     data_span_days = 0
     if all_dates:
@@ -546,18 +620,8 @@ def get_stats_timeseries() -> Response:
     # Group by day
     day_groups: dict[str, dict[str, int]] = {}
     for conv in conversations:
-        created = conv.get("created_at")
-        if created:
-            if isinstance(created, str):
-                try:
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                except ValueError:
-                    continue
-            elif isinstance(created, datetime):
-                dt = created
-            else:
-                continue
-
+        dt = _parse_export_datetime(conv.get("created_at"))
+        if dt:
             day_key = dt.strftime("%Y-%m-%d")
             if day_key not in day_groups:
                 day_groups[day_key] = {
@@ -579,29 +643,21 @@ def get_stats_timeseries() -> Response:
     for day in sorted_days:
         data = day_groups[day]
         dt = datetime.strptime(day, "%Y-%m-%d")
-        time_series["day"].append({
-            "date": day,
-            "label": dt.strftime("%b %d"),
-            "conversations": data["conversations"],
-            "human_messages": data["human_messages"],
-            "assistant_messages": data["assistant_messages"],
-        })
+        time_series["day"].append(
+            {
+                "date": day,
+                "label": dt.strftime("%b %d"),
+                "conversations": data["conversations"],
+                "human_messages": data["human_messages"],
+                "assistant_messages": data["assistant_messages"],
+            }
+        )
 
     # Group by week
     week_groups: dict[str, dict[str, int]] = {}
     for conv in conversations:
-        created = conv.get("created_at")
-        if created:
-            if isinstance(created, str):
-                try:
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                except ValueError:
-                    continue
-            elif isinstance(created, datetime):
-                dt = created
-            else:
-                continue
-
+        dt = _parse_export_datetime(conv.get("created_at"))
+        if dt:
             week_key = dt.strftime("%Y-W%W")
             if week_key not in week_groups:
                 week_groups[week_key] = {
@@ -621,29 +677,21 @@ def get_stats_timeseries() -> Response:
     sorted_weeks = sorted(week_groups.keys())
     for week in sorted_weeks:
         data = week_groups[week]
-        time_series["week"].append({
-            "date": week,
-            "label": week.replace("-W", " W"),
-            "conversations": data["conversations"],
-            "human_messages": data["human_messages"],
-            "assistant_messages": data["assistant_messages"],
-        })
+        time_series["week"].append(
+            {
+                "date": week,
+                "label": week.replace("-W", " W"),
+                "conversations": data["conversations"],
+                "human_messages": data["human_messages"],
+                "assistant_messages": data["assistant_messages"],
+            }
+        )
 
     # Group by month
     month_groups: dict[str, dict[str, int]] = {}
     for conv in conversations:
-        created = conv.get("created_at")
-        if created:
-            if isinstance(created, str):
-                try:
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                except ValueError:
-                    continue
-            elif isinstance(created, datetime):
-                dt = created
-            else:
-                continue
-
+        dt = _parse_export_datetime(conv.get("created_at"))
+        if dt:
             month_key = dt.strftime("%Y-%m")
             if month_key not in month_groups:
                 month_groups[month_key] = {
@@ -664,13 +712,15 @@ def get_stats_timeseries() -> Response:
     for month in sorted_months:
         data = month_groups[month]
         dt = datetime.strptime(month + "-01", "%Y-%m-%d")
-        time_series["month"].append({
-            "date": month,
-            "label": dt.strftime("%b %Y"),
-            "conversations": data["conversations"],
-            "human_messages": data["human_messages"],
-            "assistant_messages": data["assistant_messages"],
-        })
+        time_series["month"].append(
+            {
+                "date": month,
+                "label": dt.strftime("%b %Y"),
+                "conversations": data["conversations"],
+                "human_messages": data["human_messages"],
+                "assistant_messages": data["assistant_messages"],
+            }
+        )
 
     # Account distribution
     account_counts: dict[str, int] = {}
@@ -686,49 +736,27 @@ def get_stats_timeseries() -> Response:
     # Day of week distribution
     day_of_week_counts: dict[int, int] = {}
     for conv in conversations:
-        created = conv.get("created_at")
-        if created:
-            if isinstance(created, str):
-                try:
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                except ValueError:
-                    continue
-            elif isinstance(created, datetime):
-                dt = created
-            else:
-                continue
-
+        dt = _parse_export_datetime(conv.get("created_at"))
+        if dt:
             dow = dt.weekday()  # Monday = 0, Sunday = 6
             # Convert to Sunday = 0 format
             dow = (dow + 1) % 7
             day_of_week_counts[dow] = day_of_week_counts.get(dow, 0) + 1
 
     day_of_week_distribution = [
-        {"day": day, "count": count}
-        for day, count in sorted(day_of_week_counts.items())
+        {"day": day, "count": count} for day, count in sorted(day_of_week_counts.items())
     ]
 
     # Hour of day distribution
     hour_counts: dict[int, int] = {}
     for conv in conversations:
-        created = conv.get("created_at")
-        if created:
-            if isinstance(created, str):
-                try:
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                except ValueError:
-                    continue
-            elif isinstance(created, datetime):
-                dt = created
-            else:
-                continue
-
+        dt = _parse_export_datetime(conv.get("created_at"))
+        if dt:
             hour = dt.hour
             hour_counts[hour] = hour_counts.get(hour, 0) + 1
 
     hour_of_day_distribution = [
-        {"hour": hour, "count": count}
-        for hour, count in sorted(hour_counts.items())
+        {"hour": hour, "count": count} for hour, count in sorted(hour_counts.items())
     ]
 
     # Conversation length distribution (by message count)
@@ -751,7 +779,7 @@ def get_stats_timeseries() -> Response:
 
     length_distribution = [
         {"bucket": f"{low}-{high if high != float('inf') else '+'}", "count": count}
-        for (low, high), count in zip(length_buckets, length_counts)
+        for (low, high), count in zip(length_buckets, length_counts, strict=True)
     ]
 
     # Calculate trend (compare to previous period)
@@ -759,35 +787,37 @@ def get_stats_timeseries() -> Response:
     if days > 0 and total_conversations > 0:
         prev_from = datetime.now() - timedelta(days=days * 2)
         prev_to = datetime.now() - timedelta(days=days)
-        prev_count = db.conversations.count_documents({
-            "created_at": {
-                "$gte": prev_from.isoformat(),
-                "$lt": prev_to.isoformat(),
+        prev_count = db.conversations.count_documents(
+            {
+                "created_at": {
+                    "$gte": prev_from.isoformat(),
+                    "$lt": prev_to.isoformat(),
+                }
             }
-        })
+        )
         if prev_count > 0:
-            conversation_trend = round(
-                ((total_conversations - prev_count) / prev_count) * 100
-            )
+            conversation_trend = round(((total_conversations - prev_count) / prev_count) * 100)
 
-    return jsonify({
-        "summary": {
-            "total_conversations": total_conversations,
-            "total_messages": total_messages,
-            "avg_per_day": round(avg_per_day, 2),
-            "data_span_days": data_span_days,
-            "conversation_trend": conversation_trend,
-        },
-        "time_series": time_series,
-        "message_distribution": {
-            "human": human_messages,
-            "assistant": assistant_messages,
-        },
-        "account_distribution": account_distribution,
-        "day_of_week_distribution": day_of_week_distribution,
-        "hour_of_day_distribution": hour_of_day_distribution,
-        "length_distribution": length_distribution,
-    })
+    return _json_response(
+        {
+            "summary": {
+                "total_conversations": total_conversations,
+                "total_messages": total_messages,
+                "avg_per_day": round(avg_per_day, 2),
+                "data_span_days": data_span_days,
+                "conversation_trend": conversation_trend,
+            },
+            "time_series": time_series,
+            "message_distribution": {
+                "human": human_messages,
+                "assistant": assistant_messages,
+            },
+            "account_distribution": account_distribution,
+            "day_of_week_distribution": day_of_week_distribution,
+            "hour_of_day_distribution": hour_of_day_distribution,
+            "length_distribution": length_distribution,
+        }
+    )
 
 
 @app.route("/api/stats/heatmap")
@@ -799,7 +829,7 @@ def api_stats_heatmap() -> Response:
     start_date = datetime(year, 1, 1)
     end_date = datetime(year, 12, 31, 23, 59, 59)
 
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {
             "$match": {
                 "created_at": {
@@ -829,7 +859,7 @@ def api_stats_heatmap() -> Response:
     avg_per_day = round(total_conversations / active_days, 1) if active_days > 0 else 0
 
     # Get available years for navigation
-    available_years_pipeline = [
+    available_years_pipeline: list[dict[str, Any]] = [
         {
             "$group": {
                 "_id": {"$substr": ["$created_at", 0, 4]},
@@ -841,17 +871,19 @@ def api_stats_heatmap() -> Response:
         int(r["_id"]) for r in db.conversations.aggregate(available_years_pipeline) if r["_id"]
     ]
 
-    return jsonify({
-        "year": year,
-        "daily_counts": daily_counts,
-        "stats": {
-            "total_conversations": total_conversations,
-            "active_days": active_days,
-            "avg_per_day": avg_per_day,
-            "max_in_day": max_in_day,
-        },
-        "available_years": available_years,
-    })
+    return _json_response(
+        {
+            "year": year,
+            "daily_counts": daily_counts,
+            "stats": {
+                "total_conversations": total_conversations,
+                "active_days": active_days,
+                "avg_per_day": avg_per_day,
+                "max_in_day": max_in_day,
+            },
+            "available_years": available_years,
+        }
+    )
 
 
 @app.route("/export")
@@ -866,14 +898,14 @@ def upload() -> str | Response:
     if request.method == "POST":
         if "file" not in request.files:
             flash("No file selected", "error")
-            return redirect(request.url)
+            return _redirect_response(request.url)
 
         file = request.files["file"]
         account_name = request.form.get("account_name", "Unknown")
 
         if file.filename == "":
             flash("No file selected", "error")
-            return redirect(request.url)
+            return _redirect_response(request.url)
 
         if file and file.filename and file.filename.endswith(".zip"):
             filename = secure_filename(file.filename)
@@ -893,12 +925,12 @@ def upload() -> str | Response:
                 # Clean up uploaded file
                 os.remove(filepath)
 
-                return redirect(url_for("index"))
+                return _redirect_response(url_for("index"))
 
             except Exception as e:
                 logger.error("upload_processing_error", error=str(e))
                 flash(f"Error processing file: {e!s}", "error")
-                return redirect(request.url)
+                return _redirect_response(request.url)
 
     return render_template("upload.html")
 
@@ -971,9 +1003,7 @@ def search_conversations() -> Response:
                             "in": {
                                 "$cond": {
                                     "if": {"$eq": ["$$message.sender", "assistant"]},
-                                    "then": {
-                                        "$size": {"$ifNull": ["$$message.content", []]}
-                                    },
+                                    "then": {"$size": {"$ifNull": ["$$message.content", []]}},
                                     "else": 0,
                                 }
                             },
@@ -1006,9 +1036,7 @@ def search_conversations() -> Response:
     sort_direction = -1 if sort_order == "desc" else 1
 
     # Handle different sort fields
-    if sort_by in ["message_count", "attachment_count"]:
-        pipeline.append({"$sort": {sort_by: sort_direction, "created_at": -1}})
-    elif sort_by == "name":
+    if sort_by in ["message_count", "attachment_count", "name"]:
         pipeline.append({"$sort": {sort_by: sort_direction, "created_at": -1}})
     else:  # created_at, updated_at, or other date fields
         pipeline.append({"$sort": {sort_by: sort_direction}})
@@ -1051,7 +1079,7 @@ def search_conversations() -> Response:
     for conv in conversations_result:
         conv["_id"] = str(conv["_id"])
 
-    return jsonify(
+    return _json_response(
         {
             "conversations": conversations_result,
             "pagination": {
@@ -1073,10 +1101,10 @@ def get_conversation(uuid: str) -> tuple[Response, int] | Response:
     conversation = db.conversations.find_one({"uuid": uuid})
 
     if not conversation:
-        return jsonify({"error": "Conversation not found"}), 404
+        return _json_response({"error": "Conversation not found"}), 404
 
     conversation["_id"] = str(conversation["_id"])
-    return jsonify(conversation)
+    return _json_response(conversation)
 
 
 @app.route("/api/export/conversation/<uuid>")
@@ -1085,14 +1113,14 @@ def export_conversation(uuid: str) -> tuple[Response, int] | Response:
     conversation = db.conversations.find_one({"uuid": uuid}, {"_id": 0})
 
     if not conversation:
-        return jsonify({"error": "Conversation not found"}), 404
+        return _json_response({"error": "Conversation not found"}), 404
 
     # Create JSON file in memory
     output = BytesIO()
     output.write(json.dumps(conversation, indent=2, default=str).encode())
     output.seek(0)
 
-    return send_file(
+    return _file_response(
         output,
         mimetype="application/json",
         as_attachment=True,
@@ -1113,7 +1141,7 @@ def export_messages() -> tuple[Response, int] | Response:
     conversation = db.conversations.find_one({"uuid": conversation_uuid})
 
     if not conversation:
-        return jsonify({"error": "Conversation not found"}), 404
+        return _json_response({"error": "Conversation not found"}), 404
 
     # Extract selected messages
     messages: list[dict[str, Any]] = []
@@ -1132,7 +1160,7 @@ def export_messages() -> tuple[Response, int] | Response:
         df.to_csv(output, index=False)
         output.seek(0)
 
-        return send_file(
+        return _file_response(
             output,
             mimetype="text/csv",
             as_attachment=True,
@@ -1144,7 +1172,7 @@ def export_messages() -> tuple[Response, int] | Response:
         output.write(json.dumps(messages, indent=2, default=str).encode())
         output.seek(0)
 
-        return send_file(
+        return _file_response(
             output,
             mimetype="application/json",
             as_attachment=True,
@@ -1186,19 +1214,17 @@ def get_stats() -> Response:
         ),
     }
 
-    return jsonify(stats)
+    return _json_response(stats)
 
 
 @app.route("/api/accounts")
 def get_accounts() -> Response:
     """Get list of imported accounts."""
     accounts: list[str] = db.conversations.distinct("_account_name")
-    return jsonify(accounts)
+    return _json_response(accounts)
 
 
-@app.route(
-    "/api/attachment/<conversation_uuid>/<int:message_index>/<int:attachment_index>"
-)
+@app.route("/api/attachment/<conversation_uuid>/<int:message_index>/<int:attachment_index>")
 def download_attachment(
     conversation_uuid: str, message_index: int, attachment_index: int
 ) -> tuple[Response, int] | Response:
@@ -1206,17 +1232,17 @@ def download_attachment(
     conversation = db.conversations.find_one({"uuid": conversation_uuid})
 
     if not conversation:
-        return jsonify({"error": "Conversation not found"}), 404
+        return _json_response({"error": "Conversation not found"}), 404
 
     chat_messages: list[dict[str, Any]] = conversation.get("chat_messages", [])
     if message_index >= len(chat_messages):
-        return jsonify({"error": "Message not found"}), 404
+        return _json_response({"error": "Message not found"}), 404
 
     message = chat_messages[message_index]
     attachments: list[dict[str, Any]] = message.get("attachments", [])
 
     if attachment_index >= len(attachments):
-        return jsonify({"error": "Attachment not found"}), 404
+        return _json_response({"error": "Attachment not found"}), 404
 
     attachment = attachments[attachment_index]
 
@@ -1257,12 +1283,10 @@ def download_attachment(
             ),
         }
 
-    return jsonify(response_data)
+    return _json_response(response_data)
 
 
-@app.route(
-    "/api/artifact/<conversation_uuid>/<int:message_index>/<int:content_index>"
-)
+@app.route("/api/artifact/<conversation_uuid>/<int:message_index>/<int:content_index>")
 def get_artifact(
     conversation_uuid: str, message_index: int, content_index: int
 ) -> tuple[Response, int] | Response:
@@ -1270,22 +1294,22 @@ def get_artifact(
     conversation = db.conversations.find_one({"uuid": conversation_uuid})
 
     if not conversation:
-        return jsonify({"error": "Conversation not found"}), 404
+        return _json_response({"error": "Conversation not found"}), 404
 
     chat_messages: list[dict[str, Any]] = conversation.get("chat_messages", [])
     if message_index >= len(chat_messages):
-        return jsonify({"error": "Message not found"}), 404
+        return _json_response({"error": "Message not found"}), 404
 
     message = chat_messages[message_index]
 
     # Only assistant messages have artifacts in content blocks
     if message.get("sender") != "assistant":
-        return jsonify({"error": "Only assistant messages contain artifacts"}), 400
+        return _json_response({"error": "Only assistant messages contain artifacts"}), 400
 
     content_blocks: list[dict[str, Any]] = message.get("content", [])
 
     if content_index >= len(content_blocks):
-        return jsonify({"error": "Content block not found"}), 404
+        return _json_response({"error": "Content block not found"}), 404
 
     content_block = content_blocks[content_index]
 
@@ -1336,7 +1360,7 @@ def get_artifact(
             "citations": content_block.get("citations", []),
         }
 
-    return jsonify(response_data)
+    return _json_response(response_data)
 
 
 @app.route(
@@ -1349,17 +1373,17 @@ def download_attachment_file(
     conversation = db.conversations.find_one({"uuid": conversation_uuid})
 
     if not conversation:
-        return jsonify({"error": "Conversation not found"}), 404
+        return _json_response({"error": "Conversation not found"}), 404
 
     chat_messages: list[dict[str, Any]] = conversation.get("chat_messages", [])
     if message_index >= len(chat_messages):
-        return jsonify({"error": "Message not found"}), 404
+        return _json_response({"error": "Message not found"}), 404
 
     message = chat_messages[message_index]
     attachments: list[dict[str, Any]] = message.get("attachments", [])
 
     if attachment_index >= len(attachments):
-        return jsonify({"error": "Attachment not found"}), 404
+        return _json_response({"error": "Attachment not found"}), 404
 
     attachment = attachments[attachment_index]
 
@@ -1378,18 +1402,22 @@ def download_attachment_file(
 
         # Create response with proper headers for download
         response = make_response(content)
-        response.headers.set("Content-Disposition", "attachment", filename=filename)
+        response.headers.set(  # type: ignore[no-untyped-call]
+            "Content-Disposition", "attachment", filename=filename
+        )
         response.headers.set(
             "Content-Type",
             "text/plain; charset=utf-8" if file_type == "txt" else "application/octet-stream",
+        )  # type: ignore[no-untyped-call]
+        response.headers.set(  # type: ignore[no-untyped-call]
+            "Content-Length", str(len(content.encode("utf-8")))
         )
-        response.headers.set("Content-Length", str(len(content.encode("utf-8"))))
 
         return response
 
     except Exception as e:
         logger.error("download_response_error", error=str(e))
-        return jsonify({"error": "Failed to prepare download"}), 500
+        return _json_response({"error": "Failed to prepare download"}), 500
 
 
 @app.route("/api/recent/<collection_name>")
@@ -1401,7 +1429,7 @@ def get_recent_items(collection_name: str) -> tuple[Response, int] | Response:
     # Validate collection name
     valid_collections = ["conversations", "projects", "users", "import_history"]
     if collection_name not in valid_collections:
-        return jsonify({"error": "Invalid collection"}), 400
+        return _json_response({"error": "Invalid collection"}), 400
 
     collection: Collection[dict[str, Any]] = getattr(db, collection_name)
 
@@ -1421,17 +1449,11 @@ def get_recent_items(collection_name: str) -> tuple[Response, int] | Response:
         )
     elif collection_name == "import_history":
         items = list(
-            collection.find({}, {"_id": 0})
-            .sort("timestamp", -1)
-            .skip(skip)
-            .limit(per_page)
+            collection.find({}, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(per_page)
         )
     elif collection_name == "projects":
         items = list(
-            collection.find({}, {"_id": 0})
-            .sort("created_at", -1)
-            .skip(skip)
-            .limit(per_page)
+            collection.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page)
         )
 
         # Enhance projects with computed counts
@@ -1470,13 +1492,10 @@ def get_recent_items(collection_name: str) -> tuple[Response, int] | Response:
                 project["artifacts_count"] = 0
     else:
         items = list(
-            collection.find({}, {"_id": 0})
-            .sort("created_at", -1)
-            .skip(skip)
-            .limit(per_page)
+            collection.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page)
         )
 
-    return jsonify(
+    return _json_response(
         {
             "items": items,
             "pagination": {
@@ -1493,7 +1512,10 @@ def get_recent_items(collection_name: str) -> tuple[Response, int] | Response:
 
 # Initialize database on startup
 with app.app_context():
-    DataProcessor.setup_indexes()
+    try:
+        DataProcessor.setup_indexes()
+    except Exception as exc:
+        logger.warning("database_index_setup_failed", error=str(exc))
 
 
 if __name__ == "__main__":

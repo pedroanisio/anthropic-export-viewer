@@ -118,7 +118,7 @@ addopts = [
     "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html",
-    "--cov-fail-under=80",
+    "--cov-fail-under=91",
 ]
 markers = [
     "unit: Unit tests",
@@ -143,6 +143,5 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
 ]
-fail_under = 80
+fail_under = 91
 show_missing = true
-
