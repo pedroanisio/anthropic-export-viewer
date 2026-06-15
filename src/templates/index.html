@@ -1,130 +1,296 @@
 <!-- templates/index.html -->
 {% extends "base.html" %}
-{% block title %}Dashboard - Anthropic Data Manager{% endblock %}
+{% block title %}Workspace - Anthropic Archive Workbench{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Dashboard</h2>
-    <span class="text-muted" style="font-size: 0.875rem;"><i class="bi bi-clock me-1"></i> Last updated: {{ now }}</span>
-</div>
+<section class="workbench-hero" aria-labelledby="workspace-title">
+    <div>
+        <p class="workbench-kicker">Archive workspace</p>
+        <h1 id="workspace-title">Find, verify, and export your Anthropic conversations.</h1>
+        <p class="workbench-lede">Search is the front door. Every result carries account, message, artifact, and import context so the archive feels inspectable before it feels analytical.</p>
+    </div>
+    <div class="workbench-status" aria-label="Archive status">
+        <div>
+            <span class="status-label">Conversations</span>
+            <strong>{{ stats.conversations }}</strong>
+        </div>
+        <div>
+            <span class="status-label">Projects</span>
+            <strong>{{ stats.projects }}</strong>
+        </div>
+        <div>
+            <span class="status-label">Imports</span>
+            <strong>{{ stats.imports }}</strong>
+        </div>
+    </div>
+</section>
 
-<!-- Statistics Cards -->
-<div class="row mb-4 g-3">
-    <div class="col-md-3 col-sm-6">
-        <div class="card stat-card bg-primary text-white h-100">
-            <div class="card-body">
-                <h5 class="card-title"><i class="bi bi-chat-dots"></i> Conversations</h5>
-                <h2>{{ stats.conversations }}</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="card stat-card bg-success text-white h-100">
-            <div class="card-body">
-                <h5 class="card-title"><i class="bi bi-people"></i> Users</h5>
-                <h2>{{ stats.users }}</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="card stat-card bg-warning text-white h-100">
-            <div class="card-body">
-                <h5 class="card-title"><i class="bi bi-folder"></i> Projects</h5>
-                <h2>{{ stats.projects }}</h2>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="card stat-card bg-info text-white h-100">
-            <div class="card-body">
-                <h5 class="card-title"><i class="bi bi-arrow-down-circle"></i> Imports</h5>
-                <h2>{{ stats.imports }}</h2>
-            </div>
-        </div>
+{% if stats.archive_unavailable %}
+<div class="archive-unavailable" role="status">
+    <i class="bi bi-database-x"></i>
+    <div>
+        <strong>Archive data is unavailable.</strong>
+        <span>MongoDB is not reachable, so the workspace is showing the empty state. Start the database to search imported exports.</span>
     </div>
 </div>
+{% endif %}
 
-<!-- Recent Imports -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5><i class="bi bi-clock-history"></i> Recent Imports</h5>
-    </div>
-    <div class="card-body">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Import ID</th>
-                    <th>Account</th>
-                    <th>Date</th>
-                    <th>Conversations</th>
-                    <th>Users</th>
-                    <th>Projects</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for import in stats.recent_imports %}
-                <tr>
-                    <td><code>{{ import.import_id }}</code></td>
-                    <td>{{ import.account_name }}</td>
-                    <td>{{ import.timestamp.strftime('%Y-%m-%d %H:%M') if import.timestamp else '' }}</td>
-                    <td>{{ import.conversations.loaded }} ({{ import.conversations.duplicates }} dup)</td>
-                    <td>{{ import.users.loaded }} ({{ import.users.duplicates }} dup)</td>
-                    <td>{{ import.projects.loaded }} ({{ import.projects.duplicates }} dup)</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- Quick Search -->
-<div class="card">
-    <div class="card-header">
-        <h5><i class="bi bi-search"></i> Quick Search</h5>
-    </div>
-    <div class="card-body">
-        <div class="input-group">
-            <input type="text" class="form-control" id="quickSearch" placeholder="Search conversations...">
-            <button class="btn btn-primary" onclick="quickSearch()">
-                <i class="bi bi-search"></i> Search
-            </button>
+<section class="archive-command-surface" aria-labelledby="search-title">
+    <div class="command-header">
+        <div>
+            <p class="workbench-kicker">Primary workflow</p>
+            <h2 id="search-title">Search the archive</h2>
         </div>
-        <div id="searchResults" class="mt-3"></div>
+        <a class="btn btn-outline-secondary btn-sm" href="/conversations">
+            <i class="bi bi-list-ul"></i> Full browser
+        </a>
     </div>
-</div>
+
+    <div class="archive-search-row">
+        <label class="visually-hidden" for="quickSearch">Search conversations</label>
+        <input type="search" class="form-control archive-search-input" id="quickSearch" placeholder="Conversation title, phrase, project, or artifact signal">
+        <button class="btn btn-primary archive-search-button" id="quickSearchButton" onclick="quickSearch()">
+            <i class="bi bi-search"></i> Search
+        </button>
+    </div>
+
+    <div class="archive-scope-row" aria-label="Available archive scope">
+        <span><i class="bi bi-shield-check"></i> Account provenance in results</span>
+        <span><i class="bi bi-paperclip"></i> Attachments surfaced</span>
+        <span><i class="bi bi-file-earmark-code"></i> Artifacts surfaced</span>
+        <span><i class="bi bi-download"></i> Export from inspection</span>
+    </div>
+
+    <div id="searchState" class="search-state search-state-empty">
+        <i class="bi bi-compass"></i>
+        <span>Enter a query to inspect matching conversations.</span>
+    </div>
+    <div class="archive-results-grid">
+        <div id="searchResults" class="archive-results-list" aria-live="polite"></div>
+        <aside id="conversationInspector" class="archive-inspector" aria-live="polite">
+            <div class="inspector-empty">
+                <i class="bi bi-layout-sidebar-inset"></i>
+                <h3>No conversation selected</h3>
+                <p>Search results can be inspected here without losing archive context.</p>
+            </div>
+        </aside>
+    </div>
+</section>
+
+<section class="workbench-grid" aria-label="Archive support panels">
+    <article class="workbench-panel">
+        <div class="panel-heading">
+            <span class="panel-mark"><i class="bi bi-clock-history"></i></span>
+            <div>
+                <p class="workbench-kicker">Trust trail</p>
+                <h2>Recent imports</h2>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table archive-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Import</th>
+                        <th>Account</th>
+                        <th>Date</th>
+                        <th>Loaded</th>
+                        <th>Duplicates</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for import in stats.recent_imports %}
+                    <tr>
+                        <td><code>{{ import.import_id }}</code></td>
+                        <td>{{ import.account_name }}</td>
+                        <td>{{ import.timestamp.strftime('%Y-%m-%d %H:%M') if import.timestamp else '' }}</td>
+                        <td>{{ import.conversations.loaded }} conv / {{ import.users.loaded }} users / {{ import.projects.loaded }} projects</td>
+                        <td>{{ import.conversations.duplicates }} conv / {{ import.users.duplicates }} users / {{ import.projects.duplicates }} projects</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5">
+                            <div class="empty-inline">
+                                <i class="bi bi-inbox"></i>
+                                <span>No imports yet. Import an Anthropic export to populate the archive.</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+
+    <aside class="workbench-panel support-panel">
+        <div class="panel-heading">
+            <span class="panel-mark"><i class="bi bi-diagram-3"></i></span>
+            <div>
+                <p class="workbench-kicker">Object model</p>
+                <h2>What the UI should expose</h2>
+            </div>
+        </div>
+        <ol class="object-model-list">
+            <li><span>Account</span><small>Where the export came from</small></li>
+            <li><span>Import</span><small>When and how records entered</small></li>
+            <li><span>Conversation</span><small>The primary searchable object</small></li>
+            <li><span>Artifacts</span><small>Files, attachments, generated content</small></li>
+            <li><span>Export scope</span><small>What will leave the system</small></li>
+        </ol>
+    </aside>
+</section>
 
 <script>
+const quickSearchInput = document.getElementById('quickSearch');
+const searchButton = document.getElementById('quickSearchButton');
+const searchState = document.getElementById('searchState');
+const resultsDiv = document.getElementById('searchResults');
+const inspector = document.getElementById('conversationInspector');
+
+quickSearchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        quickSearch();
+    }
+});
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function setSearchState(icon, text, modifier = '') {
+    searchState.className = `search-state ${modifier}`;
+    searchState.innerHTML = `<i class="bi ${icon}"></i><span>${escapeHtml(text)}</span>`;
+}
+
 async function quickSearch() {
-    const query = document.getElementById('quickSearch').value;
-    
-    const response = await fetch('/api/search/conversations', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({query: query})
-    });
-    
-    const results = await response.json();
-    const resultsDiv = document.getElementById('searchResults');
-    
-    if (results.length === 0) {
-        resultsDiv.innerHTML = '<p class="text-muted">No results found</p>';
+    const query = quickSearchInput.value.trim();
+    if (!query) {
+        resultsDiv.innerHTML = '';
+        setSearchState('bi-compass', 'Enter a query to inspect matching conversations.', 'search-state-empty');
         return;
     }
-    
-    let html = '<div class="list-group">';
-    results.slice(0, 5).forEach(conv => {
-        html += `
-            <a href="/conversation/${conv.uuid}" class="list-group-item list-group-item-action">
-                <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1">${conv.name || 'Unnamed Conversation'}</h6>
-                    <small>${conv._account_name}</small>
-                </div>
-                <small class="text-muted">${conv.created_at}</small>
-            </a>
+
+    searchButton.disabled = true;
+    setSearchState('bi-arrow-repeat', 'Searching archive...', 'search-state-loading');
+
+    try {
+        const response = await fetch('/api/search/conversations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({query, per_page: 8})
+        });
+
+        if (!response.ok) {
+            throw new Error(`Search failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        const conversations = data.conversations || [];
+        const totalCount = data.pagination?.total_count || conversations.length;
+
+        if (conversations.length === 0) {
+            resultsDiv.innerHTML = '';
+            setSearchState('bi-search', `No conversations found for "${query}". Try a broader phrase or open the full browser.`, 'search-state-empty');
+            return;
+        }
+
+        setSearchState('bi-check2-circle', `${totalCount.toLocaleString()} matching conversations. Select a result to inspect.`, 'search-state-ready');
+        resultsDiv.innerHTML = conversations.map(renderResult).join('');
+    } catch (error) {
+        console.error('Quick search failed:', error);
+        resultsDiv.innerHTML = '';
+        setSearchState('bi-exclamation-triangle', 'Search failed. Check the archive service and try again.', 'search-state-error');
+    } finally {
+        searchButton.disabled = false;
+    }
+}
+
+function renderResult(conv) {
+    const title = escapeHtml(conv.name || 'Unnamed Conversation');
+    const account = escapeHtml(conv._account_name || 'Unknown account');
+    const created = escapeHtml(conv.created_at || 'Unknown date');
+    const messages = Number(conv.message_count || 0).toLocaleString();
+    const attachments = Number(conv.attachment_count || 0).toLocaleString();
+    const artifacts = Number(conv.artifact_count || 0).toLocaleString();
+    return `
+        <button class="archive-result-card" type="button" onclick="inspectConversation('${escapeHtml(conv.uuid)}')">
+            <span class="result-title">${title}</span>
+            <span class="result-meta">
+                <span><i class="bi bi-building"></i>${account}</span>
+                <span><i class="bi bi-calendar3"></i>${created}</span>
+            </span>
+            <span class="result-signals">
+                <span>${messages} messages</span>
+                <span>${attachments} attachments</span>
+                <span>${artifacts} artifacts</span>
+            </span>
+        </button>
+    `;
+}
+
+async function inspectConversation(uuid) {
+    inspector.innerHTML = `
+        <div class="inspector-loading">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span>Loading conversation...</span>
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`/api/conversation/${encodeURIComponent(uuid)}`);
+        if (!response.ok) {
+            throw new Error(`Conversation lookup failed with status ${response.status}`);
+        }
+        const conversation = await response.json();
+        const messages = conversation.chat_messages || [];
+        const userMessages = messages.filter(message => message.sender === 'human').length;
+        const assistantMessages = messages.filter(message => message.sender === 'assistant').length;
+        const attachments = messages.reduce((sum, message) => sum + ((message.attachments || []).length), 0);
+        const artifacts = messages.reduce((sum, message) => {
+            if (message.sender !== 'assistant') return sum;
+            return sum + ((message.content || []).length);
+        }, 0);
+
+        inspector.innerHTML = `
+            <div class="inspector-header">
+                <p class="workbench-kicker">Conversation inspection</p>
+                <h3>${escapeHtml(conversation.name || 'Unnamed Conversation')}</h3>
+                <span>${escapeHtml(conversation._account_name || conversation.account?.email_address || 'Unknown account')}</span>
+            </div>
+            <dl class="inspector-metrics">
+                <div><dt>Messages</dt><dd>${messages.length.toLocaleString()}</dd></div>
+                <div><dt>Human</dt><dd>${userMessages.toLocaleString()}</dd></div>
+                <div><dt>Assistant</dt><dd>${assistantMessages.toLocaleString()}</dd></div>
+                <div><dt>Attachments</dt><dd>${attachments.toLocaleString()}</dd></div>
+                <div><dt>Artifacts</dt><dd>${artifacts.toLocaleString()}</dd></div>
+                <div><dt>Created</dt><dd>${escapeHtml(conversation.created_at || 'Unknown')}</dd></div>
+            </dl>
+            <div class="inspector-actions">
+                <a class="btn btn-primary btn-sm" href="/api/export/conversation/${encodeURIComponent(uuid)}">
+                    <i class="bi bi-download"></i> Export JSON
+                </a>
+                <a class="btn btn-outline-secondary btn-sm" href="/api/export/conversation/${encodeURIComponent(uuid)}/zip">
+                    <i class="bi bi-file-zip"></i> Export ZIP
+                </a>
+                <a class="btn btn-outline-secondary btn-sm" href="/conversations">
+                    <i class="bi bi-layout-text-window-reverse"></i> Open full browser
+                </a>
+            </div>
         `;
-    });
-    html += '</div>';
-    
-    resultsDiv.innerHTML = html;
+    } catch (error) {
+        console.error('Conversation inspection failed:', error);
+        inspector.innerHTML = `
+            <div class="inspector-empty inspector-error">
+                <i class="bi bi-exclamation-triangle"></i>
+                <h3>Could not inspect conversation</h3>
+                <p>The result exists, but the detail endpoint did not return a readable conversation.</p>
+            </div>
+        `;
+    }
 }
 </script>
 {% endblock %}

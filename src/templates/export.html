@@ -1,6 +1,6 @@
 <!-- templates/export.html -->
 {% extends "base.html" %}
-{% block title %}Export - Anthropic Data Manager{% endblock %}
+{% block title %}Export - Anthropic Archive Workbench{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0">Export Data</h2>
@@ -18,7 +18,7 @@
                 <h5><i class="bi bi-chat-dots"></i> Export Conversations</h5>
             </div>
             <div class="card-body">
-                <p class="text-muted mb-4">Download your conversations with full message history, attachments metadata, and timestamps.</p>
+                <p class="text-muted mb-4">Download conversations with full message history, timestamps, and metadata. Open a conversation from the workspace or browser to export a ZIP containing the conversation JSON, user attachments, assistant artifacts, and manifest.</p>
                 
                 <div class="mb-3">
                     <label class="form-label">Account</label>
@@ -312,4 +312,3 @@ async function exportData(type) {
 loadAccounts();
 </script>
 {% endblock %}
-

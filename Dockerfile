@@ -19,6 +19,7 @@ COPY src/app.py .
 COPY src/models.py .
 COPY src/config.py .
 COPY src/templates ./templates
+COPY src/static ./static
 
 # Create non-root runtime user and upload directory
 RUN addgroup --system app \

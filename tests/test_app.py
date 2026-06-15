@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import zipfile
 from datetime import datetime, timedelta
 from io import BytesIO
 from types import SimpleNamespace
@@ -37,9 +38,9 @@ class TestIndexRoute:
         assert response.status_code == 200
 
     def test_index_contains_dashboard(self, client: FlaskClient) -> None:
-        """Test that index page contains dashboard content."""
+        """Test that index page contains workspace content."""
         response = client.get("/")
-        assert b"Dashboard" in response.data or b"dashboard" in response.data.lower()
+        assert b"Archive Workbench" in response.data
 
 
 class TestHealthRoute:
@@ -666,6 +667,11 @@ class TestExportAPI:
         response = client.get("/api/export/conversation/nonexistent-uuid")
         assert response.status_code == 404
 
+    def test_export_nonexistent_conversation_zip(self, client: FlaskClient) -> None:
+        """Test ZIP export for non-existent conversation returns 404."""
+        response = client.get("/api/export/conversation/nonexistent-uuid/zip")
+        assert response.status_code == 404
+
     def test_export_existing_conversation(
         self,
         client: FlaskClient,
@@ -677,6 +683,35 @@ class TestExportAPI:
         assert response.status_code == 200
         assert response.mimetype == "application/json"
         assert b"test-conv-uuid-123" in response.data
+
+    def test_export_conversation_zip_includes_files(
+        self,
+        client: FlaskClient,
+        populated_db: Any,
+    ) -> None:
+        """Test conversation ZIP includes JSON, attachments, artifacts, and manifest."""
+        response = client.get("/api/export/conversation/test-conv-attach-uuid-456/zip")
+
+        assert response.status_code == 200
+        assert response.mimetype == "application/zip"
+
+        with zipfile.ZipFile(BytesIO(response.data)) as bundle:
+            names = set(bundle.namelist())
+            manifest = json.loads(bundle.read("manifest.json"))
+
+            assert "conversation.json" in names
+            assert "attachments/message_0000/test_file.txt" in names
+            assert "artifacts/message_0001/assistant_thinking_0.txt" in names
+            assert "artifacts/message_0001/assistant_response_1.txt" in names
+            assert bundle.read("attachments/message_0000/test_file.txt").decode() == (
+                "This is the content of the test file."
+            )
+            assert manifest["conversation_uuid"] == "test-conv-attach-uuid-456"
+            assert {entry["kind"] for entry in manifest["files"]} == {
+                "conversation_json",
+                "user_attachment",
+                "assistant_artifact",
+            }
 
     def test_export_messages_json_and_csv(
         self,

@@ -34,6 +34,7 @@ from flask import (
 )
 from flask_cors import CORS
 from pymongo import ASCENDING, TEXT, MongoClient
+from pymongo.errors import PyMongoError
 from werkzeug.utils import secure_filename
 
 from config import get_settings
@@ -411,13 +412,25 @@ class DataProcessor:
 @app.route("/")
 def index() -> str:
     """Main dashboard."""
-    stats: dict[str, Any] = {
-        "conversations": db.conversations.count_documents({}),
-        "users": db.users.count_documents({}),
-        "projects": db.projects.count_documents({}),
-        "imports": db.import_history.count_documents({}),
-        "recent_imports": list(db.import_history.find().sort("timestamp", -1).limit(5)),
-    }
+    try:
+        stats: dict[str, Any] = {
+            "conversations": db.conversations.count_documents({}),
+            "users": db.users.count_documents({}),
+            "projects": db.projects.count_documents({}),
+            "imports": db.import_history.count_documents({}),
+            "recent_imports": list(db.import_history.find().sort("timestamp", -1).limit(5)),
+            "archive_unavailable": False,
+        }
+    except PyMongoError as exc:
+        logger.warning("homepage_archive_unavailable", error=str(exc))
+        stats = {
+            "conversations": 0,
+            "users": 0,
+            "projects": 0,
+            "imports": 0,
+            "recent_imports": [],
+            "archive_unavailable": True,
+        }
     now = datetime.now().strftime("%b %d, %Y %H:%M")
     return render_template("index.html", stats=stats, now=now)
 
@@ -1132,6 +1145,183 @@ def export_conversation(uuid: str) -> tuple[Response, int] | Response:
         mimetype="application/json",
         as_attachment=True,
         download_name=f"conversation_{uuid}.json",
+    )
+
+
+def _safe_export_filename(
+    filename: str | None, fallback: str, extension: str | None = None
+) -> str:
+    """Return a filesystem-safe archive filename while preserving useful extensions."""
+    safe = secure_filename(filename or fallback) or fallback
+    if extension and "." not in safe:
+        normalized_extension = secure_filename(extension.lstrip("."))
+        if normalized_extension and "/" not in normalized_extension:
+            safe = f"{safe}.{normalized_extension}"
+    return safe
+
+
+def _unique_zip_path(path: str, used_paths: set[str]) -> str:
+    """Avoid duplicate paths when a conversation has repeated attachment names."""
+    if path not in used_paths:
+        used_paths.add(path)
+        return path
+
+    base = Path(path)
+    stem = base.stem
+    suffix = base.suffix
+    parent = str(base.parent)
+    counter = 2
+    while True:
+        candidate_name = f"{stem}_{counter}{suffix}"
+        candidate = candidate_name if parent == "." else f"{parent}/{candidate_name}"
+        if candidate not in used_paths:
+            used_paths.add(candidate)
+            return candidate
+        counter += 1
+
+
+def _attachment_bundle_entry(
+    attachment: dict[str, Any], attachment_index: int
+) -> tuple[str, str, int]:
+    """Extract an attachment's filename, text content, and declared size."""
+    try:
+        attachment_obj = Attachment(**attachment)
+        filename = attachment_obj.file_name or attachment_obj.file_id
+        file_type = attachment_obj.file_type or attachment_obj.media_type
+        content = (
+            attachment_obj.extracted_content
+            or attachment_obj.extracted_text
+            or str(attachment.get("data") or "")
+        )
+        size = attachment_obj.file_size or attachment_obj.size or len(content.encode("utf-8"))
+    except Exception as exc:
+        logger.error("attachment_bundle_processing_error", error=str(exc))
+        filename = attachment.get("file_name") or attachment.get("file_id")
+        file_type = attachment.get("file_type") or attachment.get("media_type")
+        content = str(
+            attachment.get("extracted_content")
+            or attachment.get("extracted_text")
+            or attachment.get("data")
+            or ""
+        )
+        size = attachment.get("file_size") or attachment.get("size") or len(content.encode("utf-8"))
+
+    extension = file_type if file_type and "/" not in file_type else None
+    safe_filename = _safe_export_filename(
+        cast("str | None", filename),
+        f"attachment_{attachment_index}",
+        cast("str | None", extension),
+    )
+    return safe_filename, content, int(size)
+
+
+def _artifact_bundle_entry(
+    content_block: dict[str, Any], content_index: int
+) -> tuple[str, str, str]:
+    """Extract an assistant content block as a file-like artifact."""
+    try:
+        content_obj = ContentBlock(**content_block)
+        artifact_type = content_obj.type.value
+        if content_obj.type == ContentBlockType.TEXT:
+            content = content_obj.text or ""
+            fallback = f"assistant_response_{content_index}.txt"
+        elif content_obj.type == ContentBlockType.THINKING:
+            content = content_obj.thinking or ""
+            fallback = f"assistant_thinking_{content_index}.txt"
+        else:
+            content = content_obj.data or content_obj.text or content_obj.thinking or ""
+            fallback = f"assistant_artifact_{content_index}.txt"
+        if not content:
+            content = json.dumps(content_block, indent=2, default=str)
+        filename = content_obj.title or content_obj.id or fallback
+    except Exception as exc:
+        logger.error("artifact_bundle_processing_error", error=str(exc))
+        artifact_type = str(content_block.get("type", "unknown"))
+        content = json.dumps(content_block, indent=2, default=str)
+        filename = content_block.get("title") or f"assistant_artifact_{content_index}.txt"
+
+    safe_filename = _safe_export_filename(cast("str | None", filename), f"artifact_{content_index}", "txt")
+    return safe_filename, content, artifact_type
+
+
+@app.route("/api/export/conversation/<uuid>/zip")
+def export_conversation_zip(uuid: str) -> tuple[Response, int] | Response:
+    """Export a conversation plus all user attachments and assistant artifacts as a ZIP."""
+    conversation = db.conversations.find_one({"uuid": uuid}, {"_id": 0})
+
+    if not conversation:
+        return _json_response({"error": "Conversation not found"}), 404
+
+    output = BytesIO()
+    manifest: dict[str, Any] = {
+        "conversation_uuid": uuid,
+        "conversation_name": conversation.get("name", ""),
+        "exported_at": datetime.now().isoformat(),
+        "files": [],
+    }
+    used_paths: set[str] = set()
+
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as bundle:
+        conversation_path = _unique_zip_path("conversation.json", used_paths)
+        bundle.writestr(conversation_path, json.dumps(conversation, indent=2, default=str))
+        manifest["files"].append(
+            {"path": conversation_path, "kind": "conversation_json", "size": len(json.dumps(conversation, default=str))}
+        )
+
+        chat_messages: list[dict[str, Any]] = conversation.get("chat_messages", [])
+        for message_index, message in enumerate(chat_messages):
+            for attachment_index, attachment in enumerate(message.get("attachments", [])):
+                filename, content, declared_size = _attachment_bundle_entry(
+                    attachment, attachment_index
+                )
+                archive_path = _unique_zip_path(
+                    f"attachments/message_{message_index:04d}/{filename}", used_paths
+                )
+                bundle.writestr(archive_path, content)
+                manifest["files"].append(
+                    {
+                        "path": archive_path,
+                        "kind": "user_attachment",
+                        "message_index": message_index,
+                        "attachment_index": attachment_index,
+                        "filename": filename,
+                        "declared_size": declared_size,
+                        "exported_size": len(content.encode("utf-8")),
+                    }
+                )
+
+            if message.get("sender") != MessageRole.ASSISTANT:
+                continue
+
+            for content_index, content_block in enumerate(message.get("content", [])):
+                filename, content, artifact_type = _artifact_bundle_entry(
+                    content_block, content_index
+                )
+                archive_path = _unique_zip_path(
+                    f"artifacts/message_{message_index:04d}/{filename}", used_paths
+                )
+                bundle.writestr(archive_path, content)
+                manifest["files"].append(
+                    {
+                        "path": archive_path,
+                        "kind": "assistant_artifact",
+                        "message_index": message_index,
+                        "content_index": content_index,
+                        "filename": filename,
+                        "artifact_type": artifact_type,
+                        "exported_size": len(content.encode("utf-8")),
+                    }
+                )
+
+        manifest_path = _unique_zip_path("manifest.json", used_paths)
+        bundle.writestr(manifest_path, json.dumps(manifest, indent=2, default=str))
+
+    output.seek(0)
+    return _file_response(
+        output,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"conversation_{uuid}_bundle.zip",
     )
 
 
