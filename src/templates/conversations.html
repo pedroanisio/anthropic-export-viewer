@@ -2,30 +2,30 @@
 {% extends "base.html" %}
 {% block title %}Conversations - Anthropic Data Manager{% endblock %}
 {% block content %}
-<!-- Header with View Tabs -->
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div class="d-flex align-items-center gap-3">
-        <h2 class="mb-0">Conversations</h2>
-        <!-- View Mode Tabs -->
-        <div class="btn-group view-tabs" role="group">
-            <button type="button" class="btn btn-sm btn-outline-secondary active" id="listViewBtn" onclick="switchView('list')">
+<!-- Page header with view tabs -->
+<header class="archive-pagehead">
+    <div>
+        <p class="workbench-kicker">Archive · transcripts</p>
+        <h1>Conversations</h1>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <!-- Calendar range (hidden until the calendar view is active) -->
+        <div id="calendarControls" class="archive-viewtabs d-none" role="group" aria-label="Calendar range">
+            <button type="button" class="btn btn-sm active" id="yearViewBtn" onclick="setCalendarView('year')">Year</button>
+            <button type="button" class="btn btn-sm" id="monthViewBtn" onclick="setCalendarView('month')">Month</button>
+            <button type="button" class="btn btn-sm" id="weekViewBtn" onclick="setCalendarView('week')">Week</button>
+            <button type="button" class="btn btn-sm" id="dayViewBtn" onclick="setCalendarView('day')">Day</button>
+        </div>
+        <div class="archive-viewtabs" role="group" aria-label="View mode">
+            <button type="button" class="btn btn-sm active" id="listViewBtn" onclick="switchView('list')">
                 <i class="bi bi-list-ul me-1"></i> List
             </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarViewBtn" onclick="switchView('calendar')">
+            <button type="button" class="btn btn-sm" id="calendarViewBtn" onclick="switchView('calendar')">
                 <i class="bi bi-calendar3 me-1"></i> Calendar
             </button>
         </div>
     </div>
-    <!-- Calendar View Time Range (hidden by default) -->
-    <div id="calendarControls" class="d-none">
-        <div class="btn-group btn-group-sm" role="group">
-            <button type="button" class="btn btn-primary active" id="yearViewBtn" onclick="setCalendarView('year')">Year</button>
-            <button type="button" class="btn btn-outline-secondary" id="monthViewBtn" onclick="setCalendarView('month')">Month</button>
-            <button type="button" class="btn btn-outline-secondary" id="weekViewBtn" onclick="setCalendarView('week')">Week</button>
-            <button type="button" class="btn btn-outline-secondary" id="dayViewBtn" onclick="setCalendarView('day')">Day</button>
-        </div>
-    </div>
-</div>
+</header>
 
 <!-- Calendar Heatmap View (hidden by default) -->
 <div id="calendarView" class="d-none mb-4">
@@ -118,113 +118,121 @@
 
 <!-- List View Container -->
 <div id="listView">
-<!-- Search and Filters -->
-<div class="card mb-4">
-    <div class="card-body">
-        <div class="row mb-3">
-            <div class="col-md-4">
-                <input type="text" class="form-control" id="searchQuery" placeholder="Search conversations...">
-            </div>
-            <div class="col-md-2">
-                <select class="form-select" id="accountFilter">
-                    <option value="">All Accounts</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <select class="form-select" id="sortBy">
-                    <option value="created_at">Date Created</option>
-                    <option value="updated_at">Last Updated</option>
-                    <option value="name">Name</option>
-                    <option value="message_count">Messages Count</option>
-                    <option value="attachment_count">Artifacts</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <select class="form-select" id="sortOrder">
-                    <option value="desc">Newest First</option>
-                    <option value="asc">Oldest First</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-primary w-100" onclick="searchConversations()">
-                    <i class="bi bi-search"></i> Search
-                </button>
-            </div>
+<!-- Command surface: one durable bar for query, filters, scope, and sort -->
+<section class="archive-command-surface" aria-labelledby="browse-title">
+    <div class="command-header">
+        <div>
+            <p class="workbench-kicker">Primary workflow</p>
+            <h2 id="browse-title">Search &amp; browse the archive</h2>
         </div>
-        
-        <!-- Quick Sort Buttons -->
-        <div class="row">
-            <div class="col-12">
-                <div class="btn-group btn-group-sm" role="group" aria-label="Quick sort" id="quickSortButtons">
-                    <button type="button" class="btn btn-outline-secondary active" data-sort="created_at" data-order="desc" onclick="quickSort('created_at', 'desc', this)">
-                        <i class="bi bi-clock"></i> Recent
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" data-sort="name" data-order="asc" onclick="quickSort('name', 'asc', this)">
-                        <i class="bi bi-sort-alpha-down"></i> A-Z
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" data-sort="message_count" data-order="desc" onclick="quickSort('message_count', 'desc', this)">
-                        <i class="bi bi-chat-dots"></i> Most Active
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" data-sort="attachment_count" data-order="desc" onclick="quickSort('attachment_count', 'desc', this)">
-                        <i class="bi bi-file-earmark-code"></i> Most Artifacts
-                    </button>
-                </div>
-            </div>
+        <span class="archive-results-sortnote">Live search · Enter to jump</span>
+    </div>
+
+    <div class="archive-search-row">
+        <label class="visually-hidden" for="searchQuery">Search conversations</label>
+        <input type="search" class="form-control archive-search-input" id="searchQuery"
+               placeholder="Search by title or phrase across every imported conversation…" autocomplete="off">
+        <button class="btn btn-primary archive-search-button" id="searchBtn" onclick="searchConversations(1)">
+            <i class="bi bi-search"></i> Search
+        </button>
+    </div>
+
+    <div class="archive-filter-grid">
+        <div class="archive-field">
+            <label for="accountFilter">Account</label>
+            <select class="form-select" id="accountFilter" onchange="searchConversations(1)">
+                <option value="">All accounts</option>
+            </select>
+        </div>
+        <div class="archive-field">
+            <label for="sortBy">Sort by</label>
+            <select class="form-select" id="sortBy" onchange="searchConversations(1)">
+                <option value="created_at">Date created</option>
+                <option value="updated_at">Last updated</option>
+                <option value="name">Name</option>
+                <option value="message_count">Message count</option>
+                <option value="attachment_count">Attachments</option>
+            </select>
+        </div>
+        <div class="archive-field">
+            <label for="sortOrder">Order</label>
+            <select class="form-select" id="sortOrder" onchange="searchConversations(1)">
+                <option value="desc">Newest first</option>
+                <option value="asc">Oldest first</option>
+            </select>
+        </div>
+        <div class="archive-field">
+            <label for="dateFrom">From</label>
+            <input type="date" class="form-control" id="dateFrom" onchange="searchConversations(1)">
+        </div>
+        <div class="archive-field">
+            <label for="dateTo">To</label>
+            <input type="date" class="form-control" id="dateTo" onchange="searchConversations(1)">
         </div>
     </div>
-</div>
 
-<!-- Engagement Legend -->
-<div class="engagement-legend mb-3">
-    <small>Activity level:</small>
-    <span class="legend-item"><span class="legend-dot legend-high"></span> High (20+)</span>
-    <span class="legend-item"><span class="legend-dot legend-medium"></span> Medium (10-20)</span>
-    <span class="legend-item"><span class="legend-dot legend-low"></span> Low (&lt;10)</span>
-    <span class="legend-item ms-2" style="border-left: 1px solid var(--border-default); padding-left: 0.75rem;">
-        <span class="metric-item metric-artifacts" style="padding: 0.125rem 0.375rem; font-size: 0.625rem;">
-            <i class="bi bi-file-earmark-code"></i>
-        </span> Artifacts
-    </span>
-</div>
-
-<!-- Results Summary -->
-<div id="resultsSummary" class="alert alert-info" style="display: none;">
-    <div class="d-flex justify-content-between align-items-center">
-        <span id="summaryText"></span>
-        <small id="sortInfo" class="text-muted"></small>
+    <div class="archive-scope-toggles" role="group" aria-label="Scope filters">
+        <span class="scope-caption">Scope</span>
+        <button type="button" class="archive-scope-toggle" id="scopeAttachments" aria-pressed="false" onclick="toggleScope(this)">
+            <i class="bi bi-paperclip"></i> Has attachments
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" id="resetFilters" onclick="resetFilters()">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset
+        </button>
     </div>
+
+    <div id="searchState" class="search-state search-state-loading">
+        <i class="bi bi-arrow-repeat"></i><span>Loading the archive…</span>
+    </div>
+</section>
+
+<!-- Results toolbar -->
+<div class="archive-results-bar">
+    <p class="archive-results-count" id="resultsCount">&nbsp;</p>
+    <span class="archive-results-sortnote" id="sortNote"></span>
 </div>
 
-<!-- Results -->
-<div id="conversationsList"></div>
+<!-- Results list + progressive inspector -->
+<div class="archive-results-grid archive-results-grid--browser">
+    <div id="conversationsList" class="archive-results-list" aria-live="polite"></div>
+    <aside id="conversationInspector" class="archive-inspector" aria-live="polite">
+        <div class="inspector-empty">
+            <i class="bi bi-layout-sidebar-inset"></i>
+            <h3>No conversation selected</h3>
+            <p>Choose a result to inspect its provenance, metrics, and first exchange — then open the full transcript.</p>
+        </div>
+    </aside>
+</div>
 
 <!-- Pagination Controls -->
 <div id="paginationControls" class="mt-4"></div>
 </div><!-- End listView -->
 
-<!-- Conversation Modal -->
-<div class="modal fade" id="conversationModal" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 90vw;">
+<!-- Reading-room modal (full transcript) -->
+<div class="modal fade reading-room-modal" id="conversationModal" tabindex="-1" aria-labelledby="conversationTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header modal-header-themed">
-                <h5 class="modal-title" id="conversationTitle">
-                    <i class="bi bi-chat-dots me-2"></i>Conversation
-                </h5>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="exportConversation()">
-                        <i class="bi bi-download"></i> Export JSON
+            <div class="modal-header">
+                <div class="reading-room-head">
+                    <h5 class="modal-title" id="conversationTitle">Conversation</h5>
+                    <div class="reading-room-meta" id="conversationMeta"></div>
+                </div>
+                <div class="d-flex align-items-center gap-2 ms-3">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="exportConversation()" title="Export as JSON">
+                        <i class="bi bi-download"></i><span class="d-none d-sm-inline ms-1">JSON</span>
                     </button>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="exportConversationZip()" title="Export as ZIP with attachments and artifacts">
+                        <i class="bi bi-file-zip"></i><span class="d-none d-sm-inline ms-1">ZIP</span>
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
             </div>
-            <div class="modal-body p-4" id="conversationContent" style="min-height: 60vh;">
-                <!-- Messages will be loaded here -->
+            <div class="modal-body" id="conversationContent">
+                <!-- Transcript rendered here -->
             </div>
-            <div class="modal-footer modal-footer-themed">
-                <small class="text-muted me-auto">Use the Export button to save this conversation as JSON</small>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="bi bi-x-circle me-1"></i>Close
-                </button>
+            <div class="modal-footer">
+                <small class="text-muted me-auto"><i class="bi bi-shield-check me-1"></i>Rendered from your local archive. ZIP bundles attachments and artifacts.</small>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -235,85 +243,130 @@ let currentConversationUuid = null;
 let currentPage = 1;
 let currentQuery = '';
 let currentFilters = {};
+let inspectedConversation = null;
+let searchDebounce = null;
+const PER_PAGE = 20;
 
-// Load accounts for filter
+const INSPECTOR_EMPTY_HTML = `
+    <div class="inspector-empty">
+        <i class="bi bi-layout-sidebar-inset"></i>
+        <h3>No conversation selected</h3>
+        <p>Choose a result to inspect its provenance, metrics, and first exchange — then open the full transcript.</p>
+    </div>
+`;
+
+// Load accounts for the filter select
 async function loadAccounts() {
-    const response = await fetch('/api/accounts');
-    const accounts = await response.json();
-    
-    const select = document.getElementById('accountFilter');
-    accounts.forEach(account => {
-        const option = document.createElement('option');
-        option.value = account;
-        option.textContent = account;
-        select.appendChild(option);
-    });
+    try {
+        const response = await fetch('/api/accounts');
+        const accounts = await response.json();
+        const select = document.getElementById('accountFilter');
+        accounts.forEach(account => {
+            const option = document.createElement('option');
+            option.value = account;
+            option.textContent = account;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load accounts:', error);
+    }
 }
 
-// Search conversations
+// Update the inline search-state line inside the command surface
+function setSearchState(icon, text, modifier = '') {
+    const el = document.getElementById('searchState');
+    el.className = `search-state ${modifier}`;
+    el.innerHTML = `<i class="bi ${icon}"></i><span>${escapeHtml(text)}</span>`;
+}
+
+// Read the durable filter bar into an API filter payload
+function collectFilters() {
+    const filters = {};
+    const account = document.getElementById('accountFilter').value;
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    const hasAttachments = document.getElementById('scopeAttachments').classList.contains('is-on');
+
+    if (account) filters.account = account;
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+    if (hasAttachments) filters.has_attachments = true;
+    return filters;
+}
+
+// Search / browse conversations (page 1 by default)
 async function searchConversations(page = 1) {
     currentPage = page;
-    currentQuery = document.getElementById('searchQuery').value;
-    currentFilters = {account: document.getElementById('accountFilter').value};
-    
+    currentQuery = document.getElementById('searchQuery').value.trim();
+    currentFilters = collectFilters();
+
     const sortBy = document.getElementById('sortBy').value;
     const sortOrder = document.getElementById('sortOrder').value;
-    
-    const response = await fetch('/api/search/conversations', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            query: currentQuery,
-            filters: currentFilters,
-            page: page,
-            per_page: 20,
-            sort_by: sortBy,
-            sort_order: sortOrder
-        })
-    });
-    
-    const data = await response.json();
-    displayConversations(data.conversations);
-    displayPagination(data.pagination);
-    displayResultsSummary(data.pagination, data.sort_info);
+
+    setSearchState('bi-arrow-repeat', 'Searching the archive…', 'search-state-loading');
+
+    try {
+        const response = await fetch('/api/search/conversations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                query: currentQuery,
+                filters: currentFilters,
+                page: page,
+                per_page: PER_PAGE,
+                sort_by: sortBy,
+                sort_order: sortOrder
+            })
+        });
+
+        if (!response.ok) throw new Error(`Search failed with status ${response.status}`);
+
+        const data = await response.json();
+        displayConversations(data.conversations);
+        displayPagination(data.pagination);
+        updateResultsBar(data.pagination, data.sort_info);
+        resetInspector();
+    } catch (error) {
+        console.error('Search failed:', error);
+        document.getElementById('conversationsList').innerHTML = '';
+        document.getElementById('paginationControls').innerHTML = '';
+        document.getElementById('resultsCount').innerHTML = '&nbsp;';
+        document.getElementById('sortNote').textContent = '';
+        setSearchState('bi-exclamation-triangle', 'Search failed. Check that the archive service is running and try again.', 'search-state-error');
+    }
 }
 
-// Quick sort function
-function quickSort(sortBy, sortOrder, buttonEl) {
-    document.getElementById('sortBy').value = sortBy;
-    document.getElementById('sortOrder').value = sortOrder;
-    
-    // Update sort order label
-    const sortOrderSelect = document.getElementById('sortOrder');
-    if (sortBy === 'name') {
-        sortOrderSelect.innerHTML = `
-            <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>A-Z</option>
-            <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Z-A</option>
-        `;
-    } else if (sortBy === 'message_count' || sortBy === 'attachment_count') {
-        sortOrderSelect.innerHTML = `
-            <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Most First</option>
-            <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>Least First</option>
-        `;
-    } else {
-        sortOrderSelect.innerHTML = `
-            <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>Newest First</option>
-            <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>Oldest First</option>
-        `;
-    }
-    
-    // Update button active state
-    const buttonGroup = document.getElementById('quickSortButtons');
-    if (buttonGroup) {
-        buttonGroup.querySelectorAll('.btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-    }
-    if (buttonEl) {
-        buttonEl.classList.add('active');
-    }
-    
+// Live search with a short debounce
+function onSearchInput() {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => searchConversations(1), 320);
+}
+
+// Toggle a scope filter chip and re-run the search
+function toggleScope(buttonEl) {
+    const on = buttonEl.classList.toggle('is-on');
+    buttonEl.setAttribute('aria-pressed', on ? 'true' : 'false');
     searchConversations(1);
+}
+
+// Clear every filter back to the default browse state
+function resetFilters() {
+    document.getElementById('searchQuery').value = '';
+    document.getElementById('accountFilter').value = '';
+    document.getElementById('sortBy').value = 'created_at';
+    document.getElementById('sortOrder').value = 'desc';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    const scope = document.getElementById('scopeAttachments');
+    scope.classList.remove('is-on');
+    scope.setAttribute('aria-pressed', 'false');
+    searchConversations(1);
+}
+
+// Reset the inspector to its empty state
+function resetInspector() {
+    inspectedConversation = null;
+    document.getElementById('conversationInspector').innerHTML = INSPECTOR_EMPTY_HTML;
 }
 
 // Format date to human-readable format (e.g., "Dec 2, 2025")
@@ -353,80 +406,224 @@ function formatRelativeDate(dateStr) {
     return years === 1 ? '1 year ago' : `${years} years ago`;
 }
 
-// Display conversation list
+// Render the result list as archive catalog cards
 function displayConversations(conversations) {
     const container = document.getElementById('conversationsList');
-    
-    if (conversations.length === 0) {
-        container.innerHTML = '<div class="alert alert-info">No conversations found</div>';
-        return;
-    }
-    
-    let html = '';
-    conversations.forEach(conv => {
-        // Use computed fields from API
-        const messageCount = conv.message_count || 0;
-        const attachmentCount = conv.attachment_count || 0;
-        const hasAttachments = attachmentCount > 0;
-        const userMessages = conv.user_message_count || 0;
-        const assistantMessages = conv.assistant_message_count || 0;
-        
-        // Calculate engagement level
-        const engagementLevel = messageCount > 20 ? 'high' : messageCount > 10 ? 'medium' : 'low';
-        const engagementColor = engagementLevel === 'high' ? 'success' : engagementLevel === 'medium' ? 'warning' : 'secondary';
-        
-        // Format dates - human readable
-        const createdHuman = formatHumanDate(conv.created_at);
-        const createdRelative = formatRelativeDate(conv.created_at);
-        const updatedHuman = conv.updated_at ? formatHumanDate(conv.updated_at) : createdHuman;
-        const showUpdated = conv.updated_at && updatedHuman !== createdHuman;
-        
-        html += `
-            <div class="conversation-item ${hasAttachments ? 'has-attachments' : ''} engagement-${engagementLevel}" onclick="viewConversation('${conv.uuid}')">
-                <div class="conversation-header d-flex justify-content-between align-items-start">
-                    <div class="conversation-title-section d-flex align-items-center gap-2 flex-grow-1">
-                        <h6 class="mb-0 conversation-title card-title">${conv.name || 'Unnamed Conversation'}</h6>
-                        ${hasAttachments ? `<i class="bi bi-file-earmark-code text-warning attachment-indicator" title="${attachmentCount} artifact(s)"></i>` : ''}
-                        <span class="badge bg-${engagementColor} engagement-badge" title="Engagement Level">${messageCount}</span>
-                    </div>
-                    <span class="badge bg-secondary account-badge">${conv._account_name}</span>
-                </div>
-                
-                <div class="conversation-stats mt-2">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <small class="date-display" title="${conv.created_at}">
-                                <i class="bi bi-calendar3"></i> ${createdHuman}
-                                <span class="date-relative ms-1">(${createdRelative})</span>
-                                ${showUpdated ? `<span class="ms-2"><i class="bi bi-arrow-clockwise"></i> ${updatedHuman}</span>` : ''}
-                            </small>
-                        </div>
-                        <div class="col-md-4 text-end">
-                            <div class="interaction-metrics">
-                                <span class="metric-item" title="Total messages in conversation">
-                                    <i class="bi bi-chat-dots"></i> ${messageCount}
-                                </span>
-                                ${userMessages > 0 ? `
-                                <span class="metric-item" title="Messages you sent">
-                                    <i class="bi bi-person"></i> ${userMessages}
-                                </span>` : ''}
-                                ${assistantMessages > 0 ? `
-                                <span class="metric-item" title="Assistant responses">
-                                    <i class="bi bi-robot"></i> ${assistantMessages}
-                                </span>` : ''}
-                                ${hasAttachments ? `
-                                <span class="metric-item metric-artifacts" title="Code artifacts generated (files, snippets, etc.)">
-                                    <i class="bi bi-file-earmark-code"></i> ${attachmentCount}
-                                </span>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+
+    if (!conversations || conversations.length === 0) {
+        container.innerHTML = `
+            <div class="archive-list-empty">
+                <i class="bi bi-search"></i>
+                <h3>Nothing in the archive matches</h3>
+                <p>Try a broader phrase, clear a filter, or reset the scope to browse everything.</p>
             </div>
         `;
+        return;
+    }
+
+    const offset = (currentPage - 1) * PER_PAGE;
+    container.innerHTML = conversations.map((conv, i) => renderResultCard(conv, offset + i + 1, i)).join('');
+}
+
+// Render a single catalog-style result card
+function renderResultCard(conv, ordinal, animIndex) {
+    const messageCount = conv.message_count || 0;
+    const attachmentCount = conv.attachment_count || 0;
+    const artifactCount = conv.artifact_count || 0;
+    const userMessages = conv.user_message_count || 0;
+    const assistantMessages = conv.assistant_message_count || 0;
+
+    const level = messageCount > 20 ? 'high' : messageCount > 10 ? 'medium' : 'low';
+    const title = escapeHtml(conv.name || 'Unnamed Conversation');
+    const account = escapeHtml(conv._account_name || 'Unknown account');
+    const createdHuman = escapeHtml(formatHumanDate(conv.created_at));
+    const createdRel = escapeHtml(formatRelativeDate(conv.created_at));
+    const uuid = escapeHtml(conv.uuid);
+
+    const signals = [
+        `<span title="Total messages"><i class="bi bi-chat-square-text"></i> ${messageCount.toLocaleString()} msgs</span>`,
+        userMessages > 0 ? `<span title="Messages you sent"><i class="bi bi-person"></i> ${userMessages.toLocaleString()}</span>` : '',
+        assistantMessages > 0 ? `<span title="Claude responses"><i class="bi bi-stars"></i> ${assistantMessages.toLocaleString()}</span>` : '',
+        attachmentCount > 0 ? `<span class="sig-attachments" title="User attachments"><i class="bi bi-paperclip"></i> ${attachmentCount.toLocaleString()}</span>` : '',
+        artifactCount > 0 ? `<span class="sig-artifacts" title="Assistant artifacts"><i class="bi bi-file-earmark-code"></i> ${artifactCount.toLocaleString()}</span>` : ''
+    ].filter(Boolean).join('');
+
+    return `
+        <button class="archive-result-card is-${level}" type="button" data-uuid="${uuid}" style="--i:${animIndex}" aria-pressed="false" onclick="selectConversation('${uuid}', this)">
+            <span class="result-stamp">
+                <span class="stamp-index">№ ${ordinal.toLocaleString()}</span>
+                <span><i class="bi bi-building"></i> ${account}</span>
+                <span><i class="bi bi-calendar3"></i> ${createdHuman}</span>
+                <span class="stamp-rel">${createdRel}</span>
+            </span>
+            <span class="result-title">${title}</span>
+            <span class="result-signals">${signals}</span>
+        </button>
+    `;
+}
+
+// Update the results toolbar (count + active sort) and the search-state line
+function updateResultsBar(pagination, sortInfo) {
+    const countEl = document.getElementById('resultsCount');
+    const noteEl = document.getElementById('sortNote');
+    const total = pagination.total_count || 0;
+
+    if (total === 0) {
+        countEl.innerHTML = 'No conversations';
+        noteEl.textContent = '';
+        setSearchState('bi-search', currentQuery ? `No matches for “${currentQuery}”.` : 'The archive is empty. Import an export to begin.', 'search-state-empty');
+        return;
+    }
+
+    const start = (pagination.page - 1) * pagination.per_page + 1;
+    const end = Math.min(pagination.page * pagination.per_page, total);
+    countEl.innerHTML = `<b>${start.toLocaleString()}–${end.toLocaleString()}</b> of <b>${total.toLocaleString()}</b> conversation${total !== 1 ? 's' : ''}`;
+
+    const sortLabels = {
+        created_at: 'date created',
+        updated_at: 'last updated',
+        name: 'name',
+        message_count: 'message count',
+        attachment_count: 'attachments'
+    };
+    const order = sortInfo.sort_order === 'desc' ? 'desc' : 'asc';
+    noteEl.textContent = `sorted · ${sortLabels[sortInfo.sort_by] || sortInfo.sort_by} ${order}`;
+
+    setSearchState(
+        'bi-check2-circle',
+        currentQuery
+            ? `${total.toLocaleString()} match${total !== 1 ? 'es' : ''} for “${currentQuery}”. Select a result to inspect.`
+            : `Browsing ${total.toLocaleString()} conversations. Select a result to inspect.`,
+        'search-state-ready'
+    );
+}
+
+// Select a result → populate the progressive inspector
+async function selectConversation(uuid, cardEl) {
+    document.querySelectorAll('.archive-result-card.is-selected').forEach(el => {
+        el.classList.remove('is-selected');
+        el.setAttribute('aria-pressed', 'false');
     });
-    
-    container.innerHTML = html;
+    if (cardEl) {
+        cardEl.classList.add('is-selected');
+        cardEl.setAttribute('aria-pressed', 'true');
+    }
+
+    const inspector = document.getElementById('conversationInspector');
+    inspector.innerHTML = `
+        <div class="inspector-loading">
+            <div class="spinner-border spinner-border-sm" role="status"></div>
+            <span>Loading conversation…</span>
+        </div>
+    `;
+
+    if (window.matchMedia('(max-width: 1020px)').matches) {
+        inspector.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
+    try {
+        const response = await fetch(`/api/conversation/${encodeURIComponent(uuid)}`);
+        if (!response.ok) throw new Error(`Lookup failed with status ${response.status}`);
+        const conversation = await response.json();
+        inspectedConversation = conversation;
+        renderInspector(conversation);
+    } catch (error) {
+        console.error('Inspection failed:', error);
+        inspectedConversation = null;
+        inspector.innerHTML = `
+            <div class="inspector-empty inspector-error">
+                <i class="bi bi-exclamation-triangle"></i>
+                <h3>Could not inspect conversation</h3>
+                <p>The result exists, but the detail endpoint did not return a readable conversation.</p>
+            </div>
+        `;
+    }
+}
+
+// Render the inspector panel for a fetched conversation
+function renderInspector(conversation) {
+    const messages = conversation.chat_messages || [];
+    const userMessages = messages.filter(m => m.sender === 'human').length;
+    const assistantMessages = messages.filter(m => m.sender === 'assistant').length;
+    const attachments = messages.reduce((sum, m) => sum + ((m.attachments || []).length), 0);
+    const artifacts = messages.reduce((sum, m) => m.sender === 'assistant' ? sum + ((m.content || []).length) : sum, 0);
+
+    const uuid = encodeURIComponent(conversation.uuid);
+    const account = escapeHtml(conversation._account_name || (conversation.account && conversation.account.email_address) || 'Unknown account');
+    const preview = buildInspectorPreview(messages);
+
+    document.getElementById('conversationInspector').innerHTML = `
+        <div class="inspector-header">
+            <p class="workbench-kicker">Conversation inspection</p>
+            <h3>${escapeHtml(conversation.name || 'Unnamed Conversation')}</h3>
+            <span>${account}</span>
+        </div>
+        <dl class="inspector-metrics">
+            <div><dt>Messages</dt><dd>${messages.length.toLocaleString()}</dd></div>
+            <div><dt>You</dt><dd>${userMessages.toLocaleString()}</dd></div>
+            <div><dt>Claude</dt><dd>${assistantMessages.toLocaleString()}</dd></div>
+            <div><dt>Attachments</dt><dd>${attachments.toLocaleString()}</dd></div>
+            <div><dt>Artifacts</dt><dd>${artifacts.toLocaleString()}</dd></div>
+            <div><dt>Created</dt><dd>${escapeHtml(formatHumanDate(conversation.created_at))}</dd></div>
+        </dl>
+        ${preview}
+        <div class="inspector-actions">
+            <button class="btn btn-primary btn-sm" type="button" onclick="openTranscript()">
+                <i class="bi bi-book"></i> Read transcript
+            </button>
+            <a class="btn btn-outline-secondary btn-sm" href="/api/export/conversation/${uuid}">
+                <i class="bi bi-download"></i> JSON
+            </a>
+            <a class="btn btn-outline-secondary btn-sm" href="/api/export/conversation/${uuid}/zip">
+                <i class="bi bi-file-zip"></i> ZIP
+            </a>
+        </div>
+    `;
+}
+
+// Build the "first exchange" preview for the inspector
+function buildInspectorPreview(messages) {
+    const firstHuman = messages.find(m => m.sender === 'human');
+    const firstAssistant = messages.find(m => m.sender === 'assistant');
+    const humanText = firstHuman ? extractMessageText(firstHuman) : '';
+    const assistantText = firstAssistant ? extractMessageText(firstAssistant) : '';
+
+    if (!humanText && !assistantText) return '';
+
+    let html = '<div class="inspector-preview"><span class="preview-label">First exchange</span>';
+    if (humanText) {
+        html += `<div class="inspector-snippet"><span class="snippet-role">You</span><p>${escapeHtml(truncateText(humanText, 200))}</p></div>`;
+    }
+    if (assistantText) {
+        html += `<div class="inspector-snippet"><span class="snippet-role">Claude</span><p>${escapeHtml(truncateText(assistantText, 200))}</p></div>`;
+    }
+    html += '</div>';
+    return html;
+}
+
+// Pull plain text out of a message (text field or content blocks)
+function extractMessageText(message) {
+    if (message.text && message.text.trim()) return message.text.trim();
+    if (Array.isArray(message.content)) {
+        for (const block of message.content) {
+            const value = block && (block.text || block.thinking);
+            if (value && value.trim()) return value.trim();
+        }
+    }
+    return '';
+}
+
+// Collapse whitespace and truncate to a readable snippet
+function truncateText(text, max) {
+    const clean = text.replace(/\s+/g, ' ').trim();
+    return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+// Open the full transcript modal for the inspected conversation
+function openTranscript() {
+    if (inspectedConversation) {
+        viewConversation(inspectedConversation.uuid);
+    }
 }
 
 // Format message text with better styling
@@ -473,53 +670,85 @@ function formatMessageText(text) {
     return text;
 }
 
-// View single conversation
+// Open a conversation in the reading-room modal (reuses the inspected copy)
 async function viewConversation(uuid) {
     currentConversationUuid = uuid;
-    
-    const response = await fetch(`/api/conversation/${uuid}`);
-    const conversation = await response.json();
-    
+
+    let conversation = (inspectedConversation && inspectedConversation.uuid === uuid) ? inspectedConversation : null;
+    if (!conversation) {
+        try {
+            const response = await fetch(`/api/conversation/${encodeURIComponent(uuid)}`);
+            conversation = await response.json();
+        } catch (error) {
+            console.error('Failed to load conversation:', error);
+            return;
+        }
+    }
+
+    renderTranscript(conversation);
+    const modal = new bootstrap.Modal(document.getElementById('conversationModal'));
+    modal.show();
+}
+
+// Render the reading-room header + message stream
+function renderTranscript(conversation) {
+    const messages = conversation.chat_messages || [];
+    const userMessages = messages.filter(m => m.sender === 'human').length;
+    const assistantMessages = messages.filter(m => m.sender === 'assistant').length;
+    const account = escapeHtml(conversation._account_name || 'Unknown account');
+
     document.getElementById('conversationTitle').textContent = conversation.name || 'Conversation';
-    
-    let html = '<div class="messages-container">';
-    conversation.chat_messages.forEach((msg, index) => {
+    document.getElementById('conversationMeta').innerHTML = `
+        <span><i class="bi bi-chat-square-text"></i> ${messages.length.toLocaleString()} messages</span>
+        <span><i class="bi bi-person"></i> ${userMessages.toLocaleString()} you</span>
+        <span><i class="bi bi-stars"></i> ${assistantMessages.toLocaleString()} Claude</span>
+        <span><i class="bi bi-building"></i> ${account}</span>
+        <span><i class="bi bi-calendar3"></i> ${escapeHtml(formatHumanDate(conversation.created_at))}</span>
+    `;
+
+    let html = '<div class="reading-room">';
+    messages.forEach((msg, index) => {
         const isHuman = msg.sender === 'human';
         const formattedText = formatMessageText(msg.text);
-        
+        const timestamp = msg.created_at ? new Date(msg.created_at).toLocaleString() : '';
+
         html += `
-            <div class="message-bubble ${isHuman ? 'message-human' : 'message-assistant'}">
-                <div class="message-header-bar d-flex justify-content-between align-items-center">
-                    <strong class="sender-name">${isHuman ? '👤 You' : '🤖 Claude'}</strong>
-                    <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-outline-secondary copy-btn" 
-                                onclick="copyMessage(${index})" 
-                                title="Copy message text">
+            <article class="reading-turn reading-turn--${isHuman ? 'human' : 'assistant'}">
+                <div class="reading-gutter">
+                    <span class="reading-monogram">${isHuman ? 'Y' : 'C'}</span>
+                    <span class="reading-role">${isHuman ? 'You' : 'Claude'}</span>
+                </div>
+                <div class="reading-main">
+                    <div class="reading-turn-bar">
+                        <time class="reading-time">${escapeHtml(timestamp)}</time>
+                        <button class="btn btn-sm copy-btn btn-outline-secondary" onclick="copyMessage(${index})" title="Copy message text">
                             <i class="bi bi-clipboard"></i>
                         </button>
-                        <small class="text-muted timestamp">${new Date(msg.created_at).toLocaleString()}</small>
                     </div>
+                    <div class="message-content reading-body" id="message-${index}">${formattedText}</div>
+                    ${isHuman && msg.attachments && msg.attachments.length > 0 ?
+                        generateUserAttachmentsHTML(msg.attachments, conversation.uuid, index) : ''}
+                    ${msg.sender === 'assistant' && msg.content && msg.content.length > 0 ?
+                        generateAssistantArtifactsHTML(msg.content, conversation.uuid, index) : ''}
                 </div>
-                <div class="message-content" id="message-${index}">${formattedText}</div>
-                ${msg.sender === 'human' && msg.attachments && msg.attachments.length > 0 ? 
-                    generateUserAttachmentsHTML(msg.attachments, conversation.uuid, index) : ''}
-                ${msg.sender === 'assistant' && msg.content && msg.content.length > 0 ? 
-                    generateAssistantArtifactsHTML(msg.content, conversation.uuid, index) : ''}
-            </div>
+            </article>
         `;
     });
     html += '</div>';
-    
+
     document.getElementById('conversationContent').innerHTML = html;
-    
-    const modal = new bootstrap.Modal(document.getElementById('conversationModal'));
-    modal.show();
 }
 
 // Export conversation
 function exportConversation() {
     if (currentConversationUuid) {
         window.location.href = `/api/export/conversation/${currentConversationUuid}`;
+    }
+}
+
+function exportConversationZip() {
+    if (currentConversationUuid) {
+        window.location.href = `/api/export/conversation/${currentConversationUuid}/zip`;
     }
 }
 
@@ -995,36 +1224,6 @@ function copyMessage(messageIndex) {
     });
 }
 
-// Display results summary
-function displayResultsSummary(pagination, sortInfo) {
-    const summaryDiv = document.getElementById('resultsSummary');
-    const summaryText = document.getElementById('summaryText');
-    const sortInfoSpan = document.getElementById('sortInfo');
-    
-    if (pagination.total_count > 0) {
-        const start = (pagination.page - 1) * pagination.per_page + 1;
-        const end = Math.min(pagination.page * pagination.per_page, pagination.total_count);
-        
-        summaryText.textContent = `Showing ${start}-${end} of ${pagination.total_count} conversations`;
-        
-        // Display sort information
-        const sortLabels = {
-            'created_at': 'Date Created',
-            'updated_at': 'Last Updated', 
-            'name': 'Name',
-            'message_count': 'Messages Count',
-            'attachment_count': 'Attachments'
-        };
-        
-        const orderLabel = sortInfo.sort_order === 'desc' ? 'Descending' : 'Ascending';
-        sortInfoSpan.textContent = `Sorted by ${sortLabels[sortInfo.sort_by]} (${orderLabel})`;
-        
-        summaryDiv.style.display = 'block';
-    } else {
-        summaryDiv.style.display = 'none';
-    }
-}
-
 // Display pagination controls
 function displayPagination(pagination) {
     const container = document.getElementById('paginationControls');
@@ -1108,7 +1307,18 @@ function displayPagination(pagination) {
 
 // Initialize
 loadAccounts();
-searchConversations();
+searchConversations(1);
+
+// Live search wiring (debounced input + Enter to jump)
+const searchInput = document.getElementById('searchQuery');
+searchInput.addEventListener('input', onSearchInput);
+searchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        clearTimeout(searchDebounce);
+        searchConversations(1);
+    }
+});
 
 // ============================================
 // CALENDAR HEATMAP VIEW
@@ -1650,19 +1860,13 @@ async function showDayConversations(dateStr, count) {
 }
 </script>
 
-<!-- Calendar Heatmap Styles -->
+<!-- Calendar Heatmap Styles (page-specific) -->
 <style>
-/* View tabs */
-.view-tabs .btn {
-    padding: 0.375rem 0.875rem;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-}
-
-.view-tabs .btn.active {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    color: #fff;
+/* Calendar palette aliases — map the heatmap surfaces onto archive tokens */
+#calendarView {
+    --bg-subtle: rgba(228, 236, 229, 0.6);
+    --bg-muted: rgba(228, 236, 229, 0.32);
+    --color-primary-bg: rgba(36, 90, 72, 0.1);
 }
 
 /* Heatmap container */

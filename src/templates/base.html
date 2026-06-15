@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Anthropic Data Manager{% endblock %}</title>
+    <title>{% block title %}Anthropic Archive Workbench{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         /* ============================================
            PROFESSIONAL COLOR PALETTE - LIGHT MODE
@@ -147,7 +147,7 @@
                ============================================ */
             
             /* Font Families */
-            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             --font-mono: 'SF Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             
             /* Type Scale (1.25 ratio - Major Third) */
@@ -2543,8 +2543,9 @@
             white-space: normal;
         }
     </style>
+    <link href="{{ url_for('static', filename='css/archive-workbench.css') }}" rel="stylesheet">
 </head>
-<body>
+<body class="archive-workbench">
     <!-- Skip to main content for accessibility -->
     <a href="#main-content" class="skip-link">Skip to main content</a>
     
@@ -2552,14 +2553,14 @@
         <div class="row">
             <!-- Sidebar -->
             <div class="col-md-2 sidebar text-white p-4">
-                <h4 class="mb-4"><i class="bi bi-robot"></i> Anthropic Data</h4>
+                <h4 class="mb-4"><i class="bi bi-archive"></i> Archive Workbench</h4>
                 <nav class="nav flex-column" aria-label="Main navigation">
-                    <a class="nav-link text-white" href="/"><i class="bi bi-house"></i> Dashboard</a>
-                    <a class="nav-link text-white" href="/upload"><i class="bi bi-upload"></i> Import Data</a>
+                    <a class="nav-link text-white" href="/"><i class="bi bi-search"></i> Workspace</a>
+                    <a class="nav-link text-white" href="/upload"><i class="bi bi-upload"></i> Import</a>
                     <a class="nav-link text-white" href="/conversations"><i class="bi bi-chat-dots"></i> Conversations</a>
                     <a class="nav-link text-white" href="/projects"><i class="bi bi-folder"></i> Projects</a>
                     <a class="nav-link text-white" href="/analytics"><i class="bi bi-graph-up"></i> Analytics</a>
-                    <a class="nav-link text-white" href="/stats"><i class="bi bi-bar-chart-line"></i> Stats</a>
+                    <a class="nav-link text-white" href="/stats"><i class="bi bi-bar-chart-line"></i> Activity</a>
                     <a class="nav-link text-white" href="/export"><i class="bi bi-download"></i> Export</a>
                 </nav>
                 
@@ -2573,7 +2574,7 @@
             </div>
             
             <!-- Main Content -->
-            <main class="col-md-10 p-4" id="main-content" role="main">
+            <main class="col-md-10 p-4 workbench-main" id="main-content" role="main">
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
@@ -2628,6 +2629,19 @@
                 document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
             }
         });
+
+        // Mark the active navigation target without requiring every page to repeat state.
+        (function() {
+            const path = window.location.pathname || '/';
+            document.querySelectorAll('.sidebar .nav-link').forEach((link) => {
+                const href = link.getAttribute('href');
+                const isActive = href === '/' ? path === '/' : path.startsWith(href);
+                if (isActive) {
+                    link.classList.add('active');
+                    link.setAttribute('aria-current', 'page');
+                }
+            });
+        })();
     </script>
     
     {% block scripts %}{% endblock %}
